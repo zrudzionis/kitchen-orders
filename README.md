@@ -6,7 +6,7 @@ There are many ways to approach this problem.
 I will describe couple of them briefly.
 
 ### RDBMS with storage and inventory tables (selected)
-We would have a "storage" table with the following columns:
+We would have a "order_storage" table with the following columns:
 * storage_type: string
 * order_id: string
 
@@ -14,11 +14,11 @@ We would have an "inventory" table with the following columns:
 * storage_type: string
 * inventory_count: int
 
-Placing an order would insert a row into "storage" and increment counter in "inventory".
+Placing an order would insert a row into "order_storage" and increment counter in "inventory".
 
-Discarding order would remove a row from "storage" and decrement counter in "inventory".
+Discarding order would remove a row from "order_storage" and decrement counter in "inventory".
 
-Moving order would update storage_type in "storage" and decrement, increment counters in "inventory".
+Moving order would update storage_type in "order_storage" and decrement, increment counters in "inventory".
 
 Table modifications would be done within a transaction using the "repeatable read" isolation level to avoid "lost update" problem. To maintain storage capacity constraints and avoid phantom reads we would add inventory constraints like this:
 ```
@@ -32,7 +32,7 @@ CREATE TABLE inventory (
     )
 );
 ```
-In "storage" table order_id can be a primary key since the order can be placed to a single storage only.
+In "order_storage" table order_id can be a primary key since the order can be placed to a single storage only.
 Move operation is simple since we would only need to change storage_type.
 
 * Pros:
@@ -44,7 +44,7 @@ Move operation is simple since we would only need to change storage_type.
 
 
 ### RDBMS with storage table
-We would have a "storage" table with the following columns:
+We would have a "order_storage" table with the following columns:
 * storage_type: string
 * order_id: string
 
