@@ -26,6 +26,10 @@ def start_cooking(
         default="https://api.cloudkitchens.com",
         help="Problem server endpoint",
     ),
+    problem_file_path: str = Argument(
+        default="",
+        help="Problem used for local testing outside docker container.",
+    ),
 ):
     try:
         config = Config(
@@ -35,6 +39,7 @@ def start_cooking(
             min_pickup=min_pickup,
             max_pickup=max_pickup,
             endpoint=endpoint,
+            problem_file_path=problem_file_path,
         )
         logger.info("Starting to cook")
         _start_cooking(config)

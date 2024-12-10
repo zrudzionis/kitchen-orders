@@ -4,8 +4,10 @@ import os
 
 from pydantic import ValidationError
 
-from src import constants
-from src.models.config import Config
+import constants
+from models.config import Config
+from clients.challenge_client import ChallengeClient
+from models.problem import Problem
 
 logger = logging.getLogger(__name__)
 
@@ -24,3 +26,12 @@ def load_config() -> Config:
                 f"Failed to load valid config from file: {constants.CONFIG_FILE_PATH}. Errors: {e.errors()}."
             )
             raise
+
+def get_problem(config: Config) -> Problem:
+    if config.problem_file_path:
+        with open(config.problem_file_path, 'r') as fp:
+            problem_dict = json.load(fp)
+            return Problem(**problem_dict)
+    else:
+        client = ChallengeClient(config.endpoint, config.auth)
+        return client.fetch_problem()

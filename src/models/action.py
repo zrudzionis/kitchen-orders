@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+
 class Action:
     PLACE = "place"
     MOVE = "move"
@@ -8,7 +9,10 @@ class Action:
 
     def __init__(self, timestamp: datetime, id: str, action: str):
         # Convert datetime to Unix timestamp in microseconds
-        self.timestamp = int((timestamp - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds() * 1_000_000)
+        self.timestamp = int(
+            (timestamp - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds()
+            * 1_000_000
+        )
         self.id = id
         self.action = action
 
@@ -22,4 +26,11 @@ class Action:
         return self.action
 
     def __str__(self) -> str:
-        return f"{{timestamp: {self.timestamp}, id: {self.id}, action: {self.action} }}"
+        return str(self.to_dict())
+
+    def to_dict(self) -> str:
+        return dict(
+            id=self.id,
+            timestamp=self.timestamp,
+            action=self.action,
+        )

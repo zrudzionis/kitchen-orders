@@ -1,11 +1,8 @@
-
 import logging
-import time
 import sys
 
-from src import constants
-from src.clients.challenge_client import ChallengeClient
-from src.scheduler.scheduler_utils import is_cooking_in_progress, load_config
+from scheduler.scheduler_utils import get_problem, is_cooking_in_progress, load_config
+from models.config import Config
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -13,18 +10,18 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def main():
+def schedule_orders(config: Config = None):
     while True:
-        orders = None
+        problem = None
         cooking_in_progress = is_cooking_in_progress()
-        if cooking_in_progress and not orders:
-            config = load_config()
-            client = ChallengeClient(config.endpoint, config.auth)
-            client.get_new_problem
 
-        if not cooking_in_progress:
-            order = None
+        if cooking_in_progress and not problem:
+            if not config:
+                config = load_config()
+            problem = get_problem(config)
+            logger.info(f"Loaded problem id: {problem.test_id}")
+            # TODO start implementing scheduling
 
 
 if __name__ == "__main__":
-    main()
+    schedule_orders()
