@@ -11,12 +11,12 @@ from models.problem import Problem
 
 logger = getLogger(__name__)
 
-class Client:
+class ChallengeClient:
     def __init__(self, endpoint: str, auth: str):
         self.endpoint = endpoint
         self.auth = auth
 
-    def new_problem(self, name: str, seed: int = 0) -> 'Problem':
+    def get_new_problem(self, name: str, seed: int = 0) -> 'Problem':
         if seed == 0:
             seed = random.randint(1, 1 << 63)  # Mimics Java's Random().nextLong()
 
@@ -30,7 +30,7 @@ class Client:
         logger.info(f"Fetched new test problem, id={test_id}: {url}")
         return Problem(test_id, Order.parse(response.text))
 
-    def solve_problem(self, test_id: str, rate: timedelta, min_time: timedelta, max_time: timedelta, actions: List['Action']) -> str:
+    def submit_solution(self, test_id: str, rate: timedelta, min_time: timedelta, max_time: timedelta, actions: List['Action']) -> str:
         solution = Solution(
             options=Options(rate, min_time, max_time),
             actions=actions
