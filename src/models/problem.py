@@ -8,12 +8,6 @@ class Problem:
         self.test_id = test_id
         self.orders = orders
 
-    def get_test_id(self) -> str:
-        return self.test_id
-
-    def get_orders(self) -> List[Order]:
-        return self.orders
-
     def __str__(self):
         return str(self.to_dict())
 

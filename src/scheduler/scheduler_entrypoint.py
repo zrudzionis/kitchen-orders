@@ -1,8 +1,14 @@
 import logging
 import sys
 
-from scheduler.scheduler_utils import get_problem, is_cooking_in_progress, load_config
+from flask import Flask, jsonify, request
+import multiprocessing
+
+from pydantic import ValidationError
+
+
 from models.config import Config
+from src.scheduler.scheduler_utils import get_problem
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -10,18 +16,36 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def schedule_orders(config: Config = None):
-    while True:
-        problem = None
-        cooking_in_progress = is_cooking_in_progress()
+app = Flask(__name__)
 
-        if cooking_in_progress and not problem:
-            if not config:
-                config = load_config()
-            problem = get_problem(config)
-            logger.info(f"Loaded problem id: {problem.test_id}")
-            # TODO start implementing scheduling
+
+@app.route("/schedule-orders", methods=["POST"])
+def schedule_orders():
+    if not request.is_json:
+        return jsonify({"error": "Request must be in JSON format"}), 400
+
+    raw_config = request.get_json()
+    try:
+        config = Config(raw_config)
+    except ValidationError as e:
+        return jsonify({"errors": e.errors()}), 400
+
+    problem = get_problem(config)
+
+    logger.info(f"Starting to schedule orders for problem: {problem.test_id}")
+
+    # TODO schedule orders
+    # process = multiprocessing.Process(target=background_task, args=("example",))
+    # process.start()
+    # return jsonify(
+    #     {"message": "Task started in a separate process", "pid": process.pid}
+    # )
+
+    return (
+        jsonify({"message": "OK"}),
+        200,
+    )
 
 
 if __name__ == "__main__":
-    schedule_orders()
+    app.run(debug=True)
