@@ -1,5 +1,54 @@
 # Kitchen Orders
 
+## Quickstart
+Create virtualenv (virtualenvwrapper must be installed):
+```
+mkvirtualenv kitchen-orders
+```
+
+Activate virtualenv:
+```
+workon kitchen-orders
+```
+
+Install dependencies:
+```
+pip3 install -r requirements.txt
+```
+
+
+Start containers. Once we start containers we can continue using them on new problems.
+```
+python3 entrypoint.py start-containers
+```
+
+Start cooking (solving problem). Run this command with `--help` flag to see full list of options.
+```
+python3 entrypoint.py start-cooking
+```
+
+
+Run order scheduling with local problem file (file location must be `containers_data/problem.json`):
+```bash
+  curl -X POST http://localhost:8000/schedule-orders \
+     -H "Content-Type: application/json" \
+     -d '{"problem_file_path": "/home/containers_data/problem.json"}'
+```
+
+Run order scheduling with local problem file and full configuration:
+```
+ curl -X POST http://localhost:8000/schedule-orders \
+     -H "Content-Type: application/json" \
+     -d '{
+            "problem_file_path": "/home/containers_data/problem.json",
+            "order_rate": 500,
+            "min_pickup": 4,
+            "max_pickup": 8
+        }'
+
+```
+
+
 ## Thoughts on possible solutions
 
 There are many ways to approach this problem.

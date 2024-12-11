@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 
 from models.config import Config
-from src.scheduler.scheduler_utils import get_problem
+from scheduler.scheduler_utils import get_problem
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
@@ -26,7 +26,7 @@ def schedule_orders():
 
     raw_config = request.get_json()
     try:
-        config = Config(raw_config)
+        config = Config(**raw_config)
     except ValidationError as e:
         return jsonify({"errors": e.errors()}), 400
 

@@ -1,6 +1,6 @@
 {
   "test_id": "static_test_1",
-  "order": [
+  "orders": [
     {
       "id": "f8bebf62",
       "name": "Spaghetti Bolognese",

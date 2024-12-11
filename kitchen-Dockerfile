@@ -3,5 +3,10 @@ FROM python:3.10
 COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
 COPY . "/home"
-WORKDIR "/home"
-CMD [ "/home/container_entrypoint.sh" ]
+WORKDIR "/home/src"
+
+ENV PYTHONPATH="$WORKDIR:$PYTHONPATH"
+ENV FLASK_ENV=production
+ENV FLASK_APP="scheduler/scheduler_entrypoint.py"
+
+CMD ["flask", "run", "--host=0.0.0.0", "--port=8000"]
