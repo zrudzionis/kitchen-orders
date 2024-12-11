@@ -2,20 +2,13 @@ import logging
 import sys
 
 from flask import Flask, jsonify, request
-import multiprocessing
-
 from pydantic import ValidationError
 
-
 from models.config import Config
-from scheduler.scheduler_utils import get_problem
+from scheduler.scheduler import get_problem, schedule_problem_orders
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
-
-
 logger = logging.getLogger(__name__)
-
-
 app = Flask(__name__)
 
 
@@ -31,18 +24,13 @@ def schedule_orders():
         return jsonify({"errors": e.errors()}), 400
 
     problem = get_problem(config)
+    if len(problem.orders) == 0:
+        return jsonify({"errors": f"Problem has not orders: {problem.to_dict()}"}), 400
 
-    logger.info(f"Starting to schedule orders for problem: {problem.test_id}")
-
-    # TODO schedule orders
-    # process = multiprocessing.Process(target=background_task, args=("example",))
-    # process.start()
-    # return jsonify(
-    #     {"message": "Task started in a separate process", "pid": process.pid}
-    # )
+    actions = schedule_problem_orders(problem, config)
 
     return (
-        jsonify({"message": "OK"}),
+        jsonify({"status": "OK", "actions": [action.to_dict() for action in actions]}),
         200,
     )
 

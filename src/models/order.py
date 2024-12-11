@@ -12,18 +12,6 @@ class Order:
     def parse_orders(raw_orders: List[Dict]) -> List["Order"]:
         return [Order(**item) for item in raw_orders]
 
-    def get_id(self) -> str:
-        return self.id
-
-    def get_name(self) -> str:
-        return self.name
-
-    def get_storage_temperature(self) -> str:
-        return self.storage_temperature
-
-    def get_freshness(self) -> int:
-        return self.freshness
-
     def __str__(self) -> str:
         return str(self.to_dict())
 
