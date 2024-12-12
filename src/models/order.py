@@ -5,7 +5,7 @@ class Order:
     def __init__(self, id: str, name: str, temp: str, freshness: int):
         self.id = id
         self.name = name
-        self.storage_temperature = temp
+        self.temp = temp
         self.freshness = freshness
 
     @staticmethod
@@ -19,6 +19,6 @@ class Order:
         return dict(
             id=self.id,
             name=self.name,
-            temp=self.storage_temperature,
+            temp=self.temp,
             freshness=self.freshness,
         )

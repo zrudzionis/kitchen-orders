@@ -1,7 +1,10 @@
+from typing import Optional
 from psycopg2.pool import SimpleConnectionPool
-from psycopg2 import connection
 
 from src.constants import TRANSACTION_ISOLATION_LEVELS, TransactionIsolationLevel
+from src.models.inventory import Inventory
+from src.models.order import Order
+from src.models.storage_order import StorageOrder
 
 
 class DatabaseClient:
@@ -11,50 +14,163 @@ class DatabaseClient:
     def get_connection(self):
         return self.connection_pool.getconn()
 
-    def release_connection(self, connection: connection):
+    def release_connection(self, connection):
         self.connection_pool.putconn(connection)
 
-    def fetch_inventory(self, connection: connection):
-        """Fetch the inventory counts for all storage types."""
+    def fetch_inventory(self, connection) -> Inventory:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM inventory;")
-            return cursor.fetchall()
+            cursor.execute("SELECT storage_type, inventory_count FROM inventory;")
+            rows = cursor.fetchall()
+            inventory_map = {row[0]: row[1] for row in rows}
+            return Inventory(
+                hot=inventory_map["hot"],
+                cold=inventory_map["cold"],
+                shelf=inventory_map["shelf"],
+            )
 
-    def update_inventory(
-        self, connection: connection, storage_type: str, new_count: int
-    ):
-        """Update the inventory count for a specific storage type."""
+    def fetch_order_to_discard(self, connection) -> Optional[StorageOrder]:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
+                    WITH prioritized_orders AS (
+                        SELECT
+                            order_id,
+                            order_name,
+                            storage_type,
+                            best_storage_type,
+                            fresh_max_age,
+                            cumulative_age +
+                                CASE
+                                    WHEN storage_type = best_storage_type THEN
+                                        EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at))
+                                    ELSE
+                                        2 * EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at))
+                                END AS real_age
+                        FROM order_storage
+                        WHERE storage_type = 'shelf'
+                    ),
+                    candidate_orders AS (
+                        SELECT
+                            order_id,
+                            order_name,
+                            storage_type,
+                            best_storage_type,
+                            fresh_max_age,
+                            real_age
+                        FROM prioritized_orders
+                        WHERE real_age > fresh_max_age
+                        ORDER BY real_age DESC
+                        LIMIT 1
+                    )
+                    SELECT
+                        order_id,
+                        order_name,
+                        storage_type,
+                        best_storage_type,
+                        fresh_max_age,
+                        real_age
+                    FROM candidate_orders
+
+                    UNION ALL
+
+                    SELECT
+                        order_id,
+                        order_name,
+                        storage_type,
+                        best_storage_type,
+                        fresh_max_age,
+                        real_age
+                    FROM prioritized_orders
+                    WHERE order_id NOT IN (SELECT order_id FROM candidate_orders)
+                    ORDER BY real_age DESC
+                    LIMIT 1;
+                """
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+
+            order_id, order_name, storage_type, best_storage_type, freshness, age = row
+            order = Order(order_id, order_name, best_storage_type, freshness)
+            storage_order = StorageOrder(storage_type, age, order)
+            return storage_order
+
+    def move_order(self, connection, from_storage, to_storage, order_id) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                WITH updated_inventory AS (
+                    UPDATE inventory
+                    SET inventory_count = CASE
+                        WHEN storage_type = %s THEN inventory_count - 1
+                        WHEN storage_type = %s THEN inventory_count + 1
+                    END
+                    WHERE storage_type IN (%s, %s)
+                    RETURNING storage_type
+                )
+                UPDATE order_storage
+                SET storage_type = %s
+                WHERE order_id = %s;
+                """,
+                (
+                    from_storage,
+                    to_storage,
+                    from_storage,
+                    to_storage,
+                    to_storage,
+                    order_id,
+                ),
+            )
+
+    def insert_order(self, connection, order: Order, storage_type: str) -> None:
+        """Insert a new order into the order_storage table and update inventory."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                WITH inserted_order AS (
+                    INSERT INTO order_storage (order_id, order_name, storage_type, best_storage_type, fresh_max_age, cumulative_age)
+                    VALUES (%s, %s, %s, %s, %s, 0)
+                    RETURNING storage_type
+                )
                 UPDATE inventory
-                SET inventory_count = %s
+                SET inventory_count = inventory_count + 1
                 WHERE storage_type = %s;
                 """,
-                (new_count, storage_type),
+                (
+                    order.id,
+                    order.name,
+                    storage_type,
+                    order.temp,
+                    order.freshness,
+                    storage_type,
+                ),
             )
 
-    def insert_order(self, connection: connection, order_id: str, storage_type: str):
-        """Insert a new order into the order_storage table."""
+    def delete_order(self, connection, order_id: str):
+        """Delete an order from the order_storage table and update inventory."""
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO order_storage (order_id, storage_type)
-                VALUES (%s, %s);
-                """,
-                (order_id, storage_type),
-            )
-
-    def delete_order(self, connection: connection, order_id: str):
-        """Delete an order from the order_storage table."""
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                DELETE FROM order_storage
-                WHERE order_id = %s;
+                WITH deleted_order AS (
+                    DELETE FROM order_storage
+                    WHERE order_id = %s
+                    RETURNING storage_type
+                )
+                UPDATE inventory
+                SET inventory_count = inventory_count - 1
+                WHERE storage_type = (SELECT storage_type FROM deleted_order);
                 """,
                 (order_id,),
             )
+
+    def set_transaction_isolation_level(
+        self, connection, level: TransactionIsolationLevel
+    ):
+        if level.lower() not in TRANSACTION_ISOLATION_LEVELS:
+            raise ValueError(f"Invalid isolation level: {level}")
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"SET TRANSACTION ISOLATION LEVEL {level.upper()};")
 
     def __enter__(self):
         self.connection = self.get_connection()
@@ -68,47 +184,3 @@ class DatabaseClient:
         else:
             self.connection.commit()  # Commit the transaction if no error occurs
         self.release_connection(self.connection)
-
-    def set_transaction_isolation_level(
-        self, connection: connection, level: TransactionIsolationLevel
-    ):
-        if level.lower() not in TRANSACTION_ISOLATION_LEVELS:
-            raise ValueError(f"Invalid isolation level: {level}")
-
-        with connection.cursor() as cursor:
-            cursor.execute(f"SET TRANSACTION ISOLATION LEVEL {level.upper()};")
-
-
-# Example usage
-if __name__ == "__main__":
-    client = DatabaseClient(
-        dbname="your_db",
-        user="your_user",
-        password="your_password",
-        host="localhost",
-        port="5432",
-    )
-
-    # Example transaction
-    try:
-        with client as conn:  # This will start a transaction
-            # Set transaction isolation level
-            client.set_transaction_isolation_level(conn, "read committed")
-
-            # Fetch current inventory
-            print("Current Inventory:")
-            print(client.fetch_inventory(conn))
-
-            # Update inventory count for 'hot'
-            client.update_inventory(conn, "hot", 3)
-
-            # Insert a new order
-            client.insert_order(conn, "order123", "hot")
-
-            # Delete an order
-            client.delete_order(conn, "order123")
-    except Exception as e:
-        print(f"Transaction failed: {e}")
-
-    # Close the connection pool
-    client.close()
