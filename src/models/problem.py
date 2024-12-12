@@ -1,4 +1,4 @@
-from typing import List
+from typing import Dict, List
 
 from models.order import Order
 
@@ -15,3 +15,9 @@ class Problem:
         return dict(
             test_id=self.test_id, orders=[order.to_dict() for order in self.orders]
         )
+
+    @staticmethod
+    def from_dict(data: Dict):
+        test_id = data["test_id"]
+        orders = [Order.from_dict(order_data) for order_data in data["orders"]]
+        return Problem(test_id=test_id, orders=orders)

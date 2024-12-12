@@ -10,7 +10,16 @@ class Order:
 
     @staticmethod
     def parse_orders(raw_orders: List[Dict]) -> List["Order"]:
-        return [Order(**item) for item in raw_orders]
+        return [Order.from_dict(order_dict) for order_dict in raw_orders]
+
+    @staticmethod
+    def from_dict(order_dict: Dict) -> str:
+        return Order(
+            id=order_dict["id"],
+            name=order_dict["name"],
+            temp=order_dict["temp"],
+            freshness=order_dict["freshness"],
+        )
 
     def __str__(self) -> str:
         return str(self.to_dict())

@@ -1,6 +1,12 @@
 version: '3.9'
+
+networks:
+  shared_network:
+    driver: bridge
+
 services:
   kitchen:
+    container_name: kitchen
     build:
       context: .
       dockerfile: kitchen-Dockerfile
@@ -10,11 +16,13 @@ services:
       DB_NAME: postgres
       DB_USER: postgres
       DB_PASSWORD: example
-      DB_HOST: localhost
+      DB_HOST: db
       DB_PORT: 5432
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - shared_network
     volumes:
       - "./containers_data:/home/containers_data"
 
@@ -50,7 +58,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-
-networks:
-  shared_network:
-    driver: bridge

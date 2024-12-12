@@ -1,4 +1,6 @@
-import datetime
+import datetime as dt
+from datetime import datetime
+
 import logging
 import random
 import time
@@ -51,7 +53,7 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
     now = datetime.now()
 
     for i, order in enumerate(problem.orders):
-        store_order_time = now + datetime.timedelta(milliseconds=i * config.order_rate)
+        store_order_time = now + dt.timedelta(milliseconds=i * config.order_rate)
         jobs_finished[f"{order.id}_place"] = False
         scheduler.add_job(
             store_order,
@@ -66,7 +68,7 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
         )
 
         pickup_delta = random.randint(config.min_pickup, config.max_pickup)
-        pickup_order_time = store_order_time + datetime.timedelta(seconds=pickup_delta)
+        pickup_order_time = store_order_time + dt.timedelta(seconds=pickup_delta)
         jobs_finished[f"{order.id}_pickup"] = False
         scheduler.add_job(
             pickup_order,
