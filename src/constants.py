@@ -15,3 +15,6 @@ class TransactionIsolationLevel(Enum):
     SERIALIZABLE = "serializable"
 
 TRANSACTION_ISOLATION_LEVELS = [level.value for level in TransactionIsolationLevel]
+
+MAX_DB_CONNECTIONS = 30
+MAX_PROCESSES = 30

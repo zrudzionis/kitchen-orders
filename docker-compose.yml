@@ -6,6 +6,12 @@ services:
       dockerfile: kitchen-Dockerfile
     ports:
       - "8000:8000"
+    environment:
+      DB_NAME: postgres
+      DB_USER: postgres
+      DB_PASSWORD: example
+      DB_HOST: localhost
+      DB_PORT: 5432
     depends_on:
       db:
         condition: service_healthy
