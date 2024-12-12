@@ -101,6 +101,8 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
 
     scheduler.shutdown()
 
+    return action_log.actions
+
 
 def store_order(order: Order, db_client: DatabaseClient, action_log: ActionLog):
     connection = db_client.get_connection()
@@ -194,7 +196,7 @@ def pickup_order(order: Order, db_client: DatabaseClient, action_log: ActionLog)
         action_log.pickup(order.id)
 
 
-def _get_job_listener(job_map: Dict[bool]):
+def _get_job_listener(job_map: Dict[str, bool]):
     def job_listener(event):
         nonlocal job_map
         job_id = event.job_id
@@ -207,7 +209,7 @@ def _get_job_listener(job_map: Dict[bool]):
     return job_listener
 
 
-def _wait_until_all_jobs_finish(jobs_finished: Dict[bool]):
+def _wait_until_all_jobs_finish(jobs_finished: Dict[str, bool]):
     passed_seconds = 0
     while not all(jobs_finished.values()):
         if (

@@ -5,7 +5,8 @@ from flask import Flask, jsonify, request
 from pydantic import ValidationError
 
 from models.config import Config
-from scheduler.scheduler import get_problem, schedule_problem_orders
+from scheduler.scheduler import schedule_problem_orders
+from src.scheduler.scheduler_utils import get_problem
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
