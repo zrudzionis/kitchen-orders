@@ -16,15 +16,6 @@ class Action:
         self.id = id
         self.action = action
 
-    def get_timestamp(self) -> int:
-        return self.timestamp
-
-    def get_id(self) -> str:
-        return self.id
-
-    def get_action(self) -> str:
-        return self.action
-
     def __str__(self) -> str:
         return str(self.to_dict())
 

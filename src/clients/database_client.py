@@ -1,7 +1,12 @@
 from typing import Optional
 from psycopg2.pool import SimpleConnectionPool
 
-from src.constants import TRANSACTION_ISOLATION_LEVELS, TransactionIsolationLevel
+from src.constants import (
+    TRANSACTION_ISOLATION_LEVELS,
+    StorageType,
+    TransactionIsolationLevel,
+    MaxInventory,
+)
 from src.models.inventory import Inventory
 from src.models.order import Order
 from src.models.storage_order import StorageOrder
@@ -23,10 +28,140 @@ class DatabaseClient:
             rows = cursor.fetchall()
             inventory_map = {row[0]: row[1] for row in rows}
             return Inventory(
-                hot=inventory_map["hot"],
-                cold=inventory_map["cold"],
-                shelf=inventory_map["shelf"],
+                hot=inventory_map[StorageType.HOT],
+                cold=inventory_map[StorageType.COLD],
+                shelf=inventory_map[StorageType.SHELF],
             )
+
+    def fetch_order_to_move(self, connection) -> Optional[StorageOrder]:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                    SELECT
+                        (SELECT COUNT(*) FROM order_storage WHERE storage_type = 'hot') AS hot_count,
+                        (SELECT COUNT(*) FROM order_storage WHERE storage_type = 'cold') AS cold_count
+                """
+            )
+        hot_count, cold_count = cursor.fetchone()
+
+        if hot_count >= MaxInventory.HOT and cold_count >= MaxInventory.COLD:
+            return None
+
+        cursor.execute(
+            """
+                WITH prioritized_orders AS (
+                    SELECT
+                        order_id,
+                        order_name,
+                        storage_type,
+                        best_storage_type,
+                        fresh_max_age,
+                        cumulative_age +
+                            CASE
+                                WHEN storage_type = best_storage_type THEN
+                                    EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at))
+                                ELSE
+                                    2 * EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at))
+                            END AS real_age
+                    FROM order_storage
+                    WHERE storage_type = 'shelf' AND best_storage_type IN ('hot', 'cold')
+                ),
+
+                fresh_hot_order AS (
+                    SELECT
+                        order_id,
+                        order_name,
+                        storage_type,
+                        best_storage_type,
+                        fresh_max_age,
+                        real_age
+                    FROM prioritized_orders
+                    WHERE storage_type = 'hot' AND real_age <= fresh_max_age
+                    ORDER BY fresh_max_age - real_age ASC
+                    LIMIT 1
+                ),
+
+                stale_hot_order AS (
+                    SELECT
+                        order_id,
+                        order_name,
+                        storage_type,
+                        best_storage_type,
+                        fresh_max_age,
+                        real_age
+                    FROM prioritized_orders
+                    WHERE storage_type = 'hot' AND real_age > fresh_max_age
+                    ORDER BY real_age - fresh_max_age ASC
+                    LIMIT 1
+                ),
+
+                fresh_cold_order AS (
+                    SELECT
+                        order_id,
+                        order_name,
+                        storage_type,
+                        best_storage_type,
+                        fresh_max_age,
+                        real_age
+                    FROM prioritized_orders
+                    WHERE storage_type = 'cold' AND real_age <= fresh_max_age
+                    ORDER BY fresh_max_age - real_age ASC
+                    LIMIT 1
+                ),
+
+                stale_cold_order AS (
+                    SELECT
+                        order_id,
+                        order_name,
+                        storage_type,
+                        best_storage_type,
+                        fresh_max_age,
+                        real_age
+                    FROM prioritized_orders
+                    WHERE storage_type = 'cold' AND real_age > fresh_max_age
+                    ORDER BY real_age - fresh_max_age ASC
+                    LIMIT 1
+                )
+
+                SELECT * FROM (
+                    -- Select one fresh hot order if available, else stale hot order
+                    SELECT * FROM fresh_hot_order
+                    UNION ALL
+                    SELECT * FROM stale_hot_order WHERE NOT EXISTS (SELECT 1 FROM fresh_hot_order)
+                ) AS hot_order
+                UNION ALL
+                (
+                    -- Select one fresh cold order if available, else stale cold order
+                    SELECT * FROM fresh_cold_order
+                    UNION ALL
+                    SELECT * FROM stale_cold_order WHERE NOT EXISTS (SELECT 1 FROM fresh_cold_order)
+                ) AS cold_order
+                LIMIT 2;
+
+            """
+        )
+
+        rows = cursor.fetchall()
+        for row in rows:
+            (
+                order_id,
+                order_name,
+                storage_type,
+                best_storage_type,
+                fresh_max_age,
+                age,
+            ) = row
+            order = Order(order_id, order_name, best_storage_type, fresh_max_age)
+            storage_order = StorageOrder(storage_type, age, order)
+            hot_storage_available = (
+                best_storage_type == StorageType.HOT and hot_count < MaxInventory.HOT
+            )
+            cold_storage_available = (
+                best_storage_type == StorageType.COLD and hot_count < MaxInventory.COLD
+            )
+            if hot_storage_available or cold_storage_available:
+                return storage_order
+        return None
 
     def fetch_order_to_discard(self, connection) -> Optional[StorageOrder]:
         with connection.cursor() as cursor:
