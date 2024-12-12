@@ -1,9 +1,11 @@
 import datetime
 import logging
 import random
-from typing import List
+import time
+from typing import Dict, List
 
 import psycopg2
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from apscheduler.executors.pool import ProcessPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -29,6 +31,9 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
     logger.info(f"Starting to schedule orders for problem: {problem.test_id}")
     executors = {"default": ProcessPoolExecutor(max_workers=constants.MAX_PROCESSES)}
     scheduler = BackgroundScheduler(executors=executors)
+    job_completed = dict()
+    job_listener = _get_job_listener(job_completed)
+    scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
     db_config = DatabaseConfig()
     connection_pool = psycopg2.pool.SimpleConnectionPool(
@@ -44,8 +49,10 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
 
     action_log = ActionLog()
     now = datetime.now()
+
     for i, order in enumerate(problem.orders):
         store_order_time = now + datetime.timedelta(milliseconds=i * config.order_rate)
+        job_completed[f"{order.id}_place"] = False
         scheduler.add_job(
             store_order,
             "date",
@@ -55,10 +62,12 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
                 db_client,
                 action_log,
             ),
+            id=f"{order.id}_place",
         )
 
         pickup_delta = random.randint(config.min_pickup, config.max_pickup)
         pickup_order_time = store_order_time + datetime.timedelta(seconds=pickup_delta)
+        job_completed[f"{order.id}_pickup"] = False
         scheduler.add_job(
             pickup_order,
             "date",
@@ -68,9 +77,17 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
                 db_client,
                 action_log,
             ),
+            id=f"{order.id}_pickup",
         )
 
     scheduler.start()
+
+    while not all(job_completed.values()):
+        time.sleep(1)
+
+    logger.info("All jobs completed.")
+
+    scheduler.shutdown()
 
 
 def store_order(order: Order, db_client: DatabaseClient, action_log: ActionLog):
@@ -163,3 +180,16 @@ def pickup_order(order: Order, db_client: DatabaseClient, action_log: ActionLog)
         )
         db_client.delete_order(connection, order.id)
         action_log.pickup(order.id)
+
+
+def _get_job_listener(job_map: Dict[bool]):
+    def job_listener(event):
+        nonlocal job_map
+        job_id = event.job_id
+        if event.exception:
+            logger.error(f"Job {job_id} failed.")
+        else:
+            logger.info(f"Job {job_id} completed.")
+        job_map[job_id] = True
+
+    return job_listener
