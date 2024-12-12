@@ -9,20 +9,20 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from apscheduler.executors.pool import ProcessPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
 
-
+import constants
 from models.config import Config
 from models.problem import Problem
 from models.action import Action
-from src import constants
-from src.constants import (
+from constants import (
     MaxInventory,
     StorageType,
     TransactionIsolationLevel,
+    JOBS_IN_PROGRESS_REPORTING_PERIOD_SECONDS,
 )
-from src.clients.database_client import DatabaseClient
-from src.models.action_log import ActionLog
-from src.models.database_config import DatabaseConfig
-from src.models.order import Order
+from clients.database_client import DatabaseClient
+from models.action_log import ActionLog
+from models.database_config import DatabaseConfig
+from models.order import Order
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +31,8 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
     logger.info(f"Starting to schedule orders for problem: {problem.test_id}")
     executors = {"default": ProcessPoolExecutor(max_workers=constants.MAX_PROCESSES)}
     scheduler = BackgroundScheduler(executors=executors)
-    job_completed = dict()
-    job_listener = _get_job_listener(job_completed)
+    jobs_finished = dict()
+    job_listener = _get_job_listener(jobs_finished)
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
     db_config = DatabaseConfig()
@@ -52,7 +52,7 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
 
     for i, order in enumerate(problem.orders):
         store_order_time = now + datetime.timedelta(milliseconds=i * config.order_rate)
-        job_completed[f"{order.id}_place"] = False
+        jobs_finished[f"{order.id}_place"] = False
         scheduler.add_job(
             store_order,
             "date",
@@ -67,7 +67,7 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
 
         pickup_delta = random.randint(config.min_pickup, config.max_pickup)
         pickup_order_time = store_order_time + datetime.timedelta(seconds=pickup_delta)
-        job_completed[f"{order.id}_pickup"] = False
+        jobs_finished[f"{order.id}_pickup"] = False
         scheduler.add_job(
             pickup_order,
             "date",
@@ -82,8 +82,20 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
 
     scheduler.start()
 
-    while not all(job_completed.values()):
+    passed_seconds = 0
+    while not all(jobs_finished.values()):
+        if (
+            passed_seconds > 0
+            and passed_seconds % JOBS_IN_PROGRESS_REPORTING_PERIOD_SECONDS == 0
+        ):
+            jobs_in_progress = [
+                key for key, value in jobs_finished.items() if value is False
+            ]
+            logger.info(f"Jobs in progress: {jobs_in_progress}")
         time.sleep(1)
+        passed_seconds += 1
+
+    _wait_until_all_jobs_finish(jobs_finished)
 
     logger.info("All jobs completed.")
 
@@ -193,3 +205,18 @@ def _get_job_listener(job_map: Dict[bool]):
         job_map[job_id] = True
 
     return job_listener
+
+
+def _wait_until_all_jobs_finish(jobs_finished: Dict[bool]):
+    passed_seconds = 0
+    while not all(jobs_finished.values()):
+        if (
+            passed_seconds > 0
+            and passed_seconds % JOBS_IN_PROGRESS_REPORTING_PERIOD_SECONDS == 0
+        ):
+            jobs_in_progress = [
+                key for key, value in jobs_finished.items() if value is False
+            ]
+            logger.info(f"Jobs in progress: {jobs_in_progress}")
+        time.sleep(1)
+        passed_seconds += 1
