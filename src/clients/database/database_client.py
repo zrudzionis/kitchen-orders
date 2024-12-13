@@ -20,9 +20,9 @@ class DatabaseClient:
         )
         inventory_map = {row[0]: row[1] for row in result}
         return Inventory(
-            hot=inventory_map[StorageType.HOT.value],
-            cold=inventory_map[StorageType.COLD.value],
-            shelf=inventory_map[StorageType.SHELF.value],
+            hot=inventory_map[StorageType.HOT],
+            cold=inventory_map[StorageType.COLD],
+            shelf=inventory_map[StorageType.SHELF],
         )
 
     def fetch_order_to_move(self, session: Session) -> Optional[StorageOrder]:
@@ -32,16 +32,16 @@ class DatabaseClient:
                 SELECT
                     (SELECT COUNT(*) FROM order_storage WHERE storage_type = 'hot') AS hot_count,
                     (SELECT COUNT(*) FROM order_storage WHERE storage_type = 'cold') AS cold_count
-            """
+                """
             )
         )
         hot_count, cold_count = result.fetchone()
 
         storage_types = []
-        if hot_count < MaxInventory.HOT.value:
-            storage_types.append(StorageType.HOT.value)
-        if cold_count < MaxInventory.COLD.value:
-            storage_types.append(StorageType.COLD.value)
+        if hot_count < MaxInventory.HOT:
+            storage_types.append(StorageType.HOT)
+        if cold_count < MaxInventory.COLD:
+            storage_types.append(StorageType.COLD)
 
         if not storage_types:
             return None
@@ -126,25 +126,25 @@ class DatabaseClient:
         session.execute(
             text(
                 """
-            WITH updated_inventory AS (
-                UPDATE inventory
-                SET inventory_count = CASE
-                    WHEN storage_type = :from_storage THEN inventory_count - 1
-                    WHEN storage_type = :to_storage THEN inventory_count + 1
-                END
-                WHERE storage_type IN (:from_storage, :to_storage)
-                RETURNING storage_type
-            )
-            UPDATE order_storage
-            SET storage_type = :to_storage
-            WHERE order_id = :order_id and storage_type = :from_storage;
-            """,
-                {
-                    "from_storage": from_storage,
-                    "to_storage": to_storage,
-                    "order_id": order_id,
-                },
-            )
+                WITH updated_inventory AS (
+                    UPDATE inventory
+                    SET inventory_count = CASE
+                        WHEN storage_type = :from_storage THEN inventory_count - 1
+                        WHEN storage_type = :to_storage THEN inventory_count + 1
+                    END
+                    WHERE storage_type IN (:from_storage, :to_storage)
+                    RETURNING storage_type
+                )
+                UPDATE order_storage
+                SET storage_type = :to_storage
+                WHERE order_id = :order_id and storage_type = :from_storage;
+                """
+            ),
+            {
+                "from_storage": from_storage,
+                "to_storage": to_storage,
+                "order_id": order_id,
+            },
         )
 
     def insert_order(self, session: Session, order: Order, storage_type: str) -> None:
@@ -152,25 +152,25 @@ class DatabaseClient:
         session.execute(
             text(
                 """
-            WITH inserted_order AS (
-                INSERT INTO order_storage (
-                    order_id, order_name, storage_type, best_storage_type, fresh_max_age, cumulative_age
+                WITH inserted_order AS (
+                    INSERT INTO order_storage (
+                        order_id, order_name, storage_type, best_storage_type, fresh_max_age, cumulative_age
+                    )
+                    VALUES (:order_id, :order_name, :storage_type, :best_storage_type, :fresh_max_age, 0)
+                    RETURNING storage_type
                 )
-                VALUES (:order_id, :order_name, :storage_type, :best_storage_type, :fresh_max_age, 0)
-                RETURNING storage_type
-            )
-            UPDATE inventory
-            SET inventory_count = inventory_count + 1
-            WHERE storage_type = :storage_type;
-            """,
-                {
-                    "order_id": order.id,
-                    "order_name": order.name,
-                    "storage_type": storage_type,
-                    "best_storage_type": order.temp,
-                    "fresh_max_age": order.freshness,
-                },
-            )
+                UPDATE inventory
+                SET inventory_count = inventory_count + 1
+                WHERE storage_type = :storage_type;
+                """
+            ),
+            {
+                "order_id": order.id,
+                "order_name": order.name,
+                "storage_type": storage_type,
+                "best_storage_type": order.temp,
+                "fresh_max_age": order.freshness,
+            },
         )
 
     def delete_order(self, session: Session, order_id: str) -> None:
@@ -178,17 +178,17 @@ class DatabaseClient:
         result = session.execute(
             text(
                 """
-            WITH deleted_order AS (
-                DELETE FROM order_storage
-                WHERE order_id = :order_id
-                RETURNING storage_type
-            )
-            UPDATE inventory
-            SET inventory_count = inventory_count - 1
-            WHERE storage_type = (SELECT storage_type FROM deleted_order);
-            """,
-                {"order_id": order_id},
-            )
+                WITH deleted_order AS (
+                    DELETE FROM order_storage
+                    WHERE order_id = :order_id
+                    RETURNING storage_type
+                )
+                UPDATE inventory
+                SET inventory_count = inventory_count - 1
+                WHERE storage_type = (SELECT storage_type FROM deleted_order);
+                """,
+            ),
+            {"order_id": order_id},
         )
 
         if result.rowcount == 0:
@@ -204,7 +204,9 @@ class DatabaseClient:
     ) -> ContextManager[Session]:
         try:
             session.begin()
-            session.execute(f"SET TRANSACTION ISOLATION LEVEL {isolation_level.value};")
+            session.execute(
+                text(f"SET TRANSACTION ISOLATION LEVEL {isolation_level.value};")
+            )
             yield session
             session.commit()
         except Exception:

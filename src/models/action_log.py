@@ -1,52 +1,55 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from threading import Lock
 from typing import List
 
-
 from models.action import Action
-from utils import get_is_queue
+from models.thread_safe_list import ThreadSafeList
 
 
 class ActionLog:
-    def __init__(self, actions: List = None):
+    def __init__(self, actions: ThreadSafeList = None):
         if not actions:
-            self._actions = []
+            self._actions = ThreadSafeList()
         else:
-            self.actions = actions
+            self._actions = actions
+        self._lock = Lock()
+        self._snapshot = []
 
     def place(self, order_id: str):
-        self.add_action(self.get_place(order_id))
+        self.add(self.get_place(order_id))
 
     def move(self, order_id: str):
-        self.add_action(self.get_move(order_id))
+        self.add(self.get_move(order_id))
 
     def discard(self, order_id: str):
-        self.add_action(self.get_discard(order_id))
+        self.add(self.get_discard(order_id))
 
     def pickup(self, order_id: str):
-        self.add_action(self.get_pickup(order_id))
+        self.add(self.get_pickup(order_id))
 
     def add(self, action: Action):
-        if get_is_queue(self.actions):
-            self.actions.put(action)
-        else:
-            self.actions.append(action)
+        self._actions.append(action)
 
-    @property
-    def actions(self):
-        return sorted(self._actions, key=lambda action: action.timestamp)
+    def get_snapshot(self) -> List[Action]:
+        actions = self._actions.get_snapshot()
+        return sorted(actions, key=lambda action: action.timestamp)
 
     @staticmethod
     def get_move(order_id: str):
-        return Action(datetime.now(), order_id, Action.MOVE)
+        return Action(ActionLog._get_now(), order_id, Action.MOVE)
 
     @staticmethod
     def get_place(order_id: str):
-        return Action(datetime.now(), order_id, Action.PLACE)
+        return Action(ActionLog._get_now(), order_id, Action.PLACE)
 
     @staticmethod
     def get_discard(order_id: str):
-        return Action(datetime.now(), order_id, Action.DISCARD)
+        return Action(ActionLog._get_now(), order_id, Action.DISCARD)
 
     @staticmethod
     def get_pickup(order_id: str):
-        return Action(datetime.now(), order_id, Action.PICKUP)
+        return Action(ActionLog._get_now(), order_id, Action.PICKUP)
+
+    @staticmethod
+    def _get_now():
+        return datetime.now(tz=timezone.utc)

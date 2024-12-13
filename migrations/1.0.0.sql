@@ -15,7 +15,7 @@ INSERT INTO inventory (storage_type, inventory_count) VALUES ('shelf', 0);
 
 CREATE TABLE order_storage (
     order_id VARCHAR(50) PRIMARY KEY,
-    order_name VARCHAR(20),
+    order_name VARCHAR(150),
     best_storage_type VARCHAR(20),
     fresh_max_age BIGINT DEFAULT 0,
     storage_type VARCHAR(20),
