@@ -36,8 +36,6 @@ BEGIN
             ELSE
                 2 * EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - OLD.updated_at))
         END;
-
-    NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -46,3 +44,17 @@ CREATE TRIGGER order_age_trigger
 BEFORE UPDATE ON order_storage
 FOR EACH ROW
 EXECUTE FUNCTION update_order_age();
+
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_order_storage_updated_at
+AFTER UPDATE ON order_storage
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();

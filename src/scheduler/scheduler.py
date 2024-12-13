@@ -2,11 +2,12 @@ import datetime as dt
 from datetime import datetime
 
 import logging
+from multiprocessing import Manager, Queue
 import random
 import time
 from typing import Dict, List
 
-import psycopg2
+from sqlalchemy.orm import Session
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from apscheduler.executors.pool import ProcessPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -21,7 +22,11 @@ from constants import (
     TransactionIsolationLevel,
     JOBS_IN_PROGRESS_REPORTING_PERIOD_SECONDS,
 )
-from clients.database_client import DatabaseClient
+from src.clients.database.session_pool import (
+    get_database_session_pool,
+    get_database_session_factory,
+)
+from src.clients.database.database_client import DatabaseClient
 from models.action_log import ActionLog
 from models.database_config import DatabaseConfig
 from models.order import Order
@@ -37,84 +42,86 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
     job_listener = _get_job_listener(jobs_finished)
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
-    db_config = DatabaseConfig()
-    connection_pool = psycopg2.pool.SimpleConnectionPool(
-        1,
-        constants.MAX_DB_CONNECTIONS,
-        dbname=db_config.db_name,
-        user=db_config.user,
-        password=db_config.password,
-        host=db_config.host,
-        port=db_config.port,
-    )
-    db_client = DatabaseClient(connection_pool)
+    db_client = DatabaseClient()
 
-    action_log = ActionLog()
+    initial_delay_seconds = 1
     now = datetime.now()
+    start_time = now + dt.timedelta(seconds=initial_delay_seconds)
 
-    for i, order in enumerate(problem.orders):
-        store_order_time = now + dt.timedelta(milliseconds=i * config.order_rate)
-        jobs_finished[f"{order.id}_place"] = False
-        scheduler.add_job(
-            store_order,
-            "date",
-            run_date=store_order_time,
-            args=(
-                order,
-                db_client,
-                action_log,
-            ),
-            id=f"{order.id}_place",
-        )
+    with Manager() as manager:
+        actions = manager.Queue()
 
-        pickup_delta = random.randint(config.min_pickup, config.max_pickup)
-        pickup_order_time = store_order_time + dt.timedelta(seconds=pickup_delta)
-        jobs_finished[f"{order.id}_pickup"] = False
-        scheduler.add_job(
-            pickup_order,
-            "date",
-            run_date=pickup_order_time,
-            args=(
-                order,
-                db_client,
-                action_log,
-            ),
-            id=f"{order.id}_pickup",
-        )
+        for i, order in enumerate(problem.orders):
+            store_order_time = start_time + dt.timedelta(milliseconds=i * config.order_rate)
+            jobs_finished[f"{order.id}_place"] = False
+            scheduler.add_job(
+                store_order,
+                "date",
+                run_date=store_order_time,
+                args=(
+                    order,
+                    db_client,
+                    actions,
+                ),
+                id=f"{order.id}_place",
+            )
 
-    scheduler.start()
+            pickup_delta = random.randint(config.min_pickup, config.max_pickup)
+            pickup_order_time = store_order_time + dt.timedelta(seconds=pickup_delta)
+            jobs_finished[f"{order.id}_pickup"] = False
+            scheduler.add_job(
+                pickup_order,
+                "date",
+                run_date=pickup_order_time,
+                args=(
+                    order,
+                    db_client,
+                    actions,
+                ),
+                id=f"{order.id}_pickup",
+            )
 
-    passed_seconds = 0
-    while not all(jobs_finished.values()):
-        if (
-            passed_seconds > 0
-            and passed_seconds % JOBS_IN_PROGRESS_REPORTING_PERIOD_SECONDS == 0
-        ):
-            jobs_in_progress = [
-                key for key, value in jobs_finished.items() if value is False
-            ]
-            logger.info(f"Jobs in progress: {jobs_in_progress}")
-        time.sleep(1)
-        passed_seconds += 1
+        scheduler.start()
 
-    _wait_until_all_jobs_finish(jobs_finished)
+        _wait_until_all_jobs_finish(jobs_finished)
 
-    logger.info("All jobs completed.")
+        logger.info("All jobs completed.")
 
-    scheduler.shutdown()
+        scheduler.shutdown()
 
-    return action_log.actions
+        action_log = ActionLog()
+        while not actions.empty():
+            action_log.add(actions.get())
+
+        return action_log.actions
 
 
-def store_order(order: Order, db_client: DatabaseClient, action_log: ActionLog):
-    connection = db_client.get_connection()
+def store_order(
+    order: Order,
+    db_client: DatabaseClient,
+    actions: Queue,
+):
+    db_config = DatabaseConfig()
+    session_factory = get_database_session_factory(get_database_session_pool(db_config))
+    session = session_factory()
     try:
-        inventory = db_client.fetch_inventory(connection)
+        _store_order(order, db_client, actions, session)
+    except:
+        # TODO error handle
+        pass
+    finally:
+        session.close()
+
+
+def _store_order(
+    order: Order, db_client: DatabaseClient, actions: Queue, session: Session
+):
+    try:
+        inventory = db_client.fetch_inventory(session)
     except Exception as e:
         logger.error(f"Unexepected error while fetching inventory. Error: {e}")
         raise
-    finally:
-        db_client.release_connection()
+
     shelf_available = inventory.shelf < MaxInventory.SHELF
     best_storage_available = (
         (order.temp == StorageType.HOT and inventory.hot < MaxInventory.HOT)
@@ -125,77 +132,96 @@ def store_order(order: Order, db_client: DatabaseClient, action_log: ActionLog):
     # TODO add retries
 
     if best_storage_available:
-        _place_order_to_best_storage(order, db_client, action_log)
+        _place_order_to_best_storage(order, db_client, actions, session)
     elif shelf_available:
-        _place_order_when_best_storage_is_full(order, db_client, action_log)
+        _place_order_when_best_storage_is_full(order, db_client, actions, session)
     else:
-        _place_order_when_no_space_left(order, db_client, action_log)
+        _place_order_when_no_space_left(order, db_client, actions, session)
 
 
 def _place_order_to_best_storage(
-    order: Order, db_client: DatabaseClient, action_log: ActionLog
+    order: Order,
+    db_client: DatabaseClient,
+    actions: Queue,
+    session,
 ) -> None:
-    with db_client as connection:
-        db_client.set_transaction_isolation_level(
-            connection, TransactionIsolationLevel.READ_COMMITTED
-        )
-        db_client.insert_order(connection, order, order.temp)
-        action_log.place(order.id)
+    with db_client.transaction(session, TransactionIsolationLevel.READ_COMMITTED):
+        db_client.insert_order(session, order, order.temp)
+        actions.put(ActionLog.place(order.id))
 
 
 def _place_order_when_best_storage_is_full(
-    order: Order, db_client: DatabaseClient, action_log: ActionLog
+    order: Order,
+    db_client: DatabaseClient,
+    actions: Queue,
+    session: Session,
 ) -> None:
-    with db_client as connection:
-        db_client.set_transaction_isolation_level(
-            connection, TransactionIsolationLevel.READ_COMMITTED
-        )
-        db_client.insert_order(connection, order, StorageType.SHELF)
-        action_log.place(order.id)
+    with db_client.transaction(session, TransactionIsolationLevel.READ_COMMITTED):
+        db_client.insert_order(session, order, StorageType.SHELF)
+        actions.put(ActionLog.place(order.id))
 
 
 def _place_order_when_no_space_left(
-    order: Order, db_client: DatabaseClient, action_log: ActionLog
+    order: Order,
+    db_client: DatabaseClient,
+    actions: Queue,
+    session: Session,
 ) -> None:
-    with db_client as connection:
+    # TODO do we need repeatable read?
+    with db_client.transaction(session, TransactionIsolationLevel.REPEATABLE_READ):
         db_client.set_transaction_isolation_level(
-            connection, TransactionIsolationLevel.REPEATABLE_READ
+            session, TransactionIsolationLevel.REPEATABLE_READ
         )
-        order_to_move = db_client.fetch_order_to_move(connection)
+        order_to_move = db_client.fetch_order_to_move(session)
         order_to_move_id = order_to_discard_id = None
 
         if order_to_move:
-            order_to_move_id = order_to_move.id
             db_client.move_order(
-                connection,
+                session,
                 order_to_move.storage_type,
                 order_to_move.order.temp,
-                order_to_move_id,
+                order_to_move.id,
             )
-            action_log.discard(order.id)
+            order_to_move_id = order_to_move.id
         else:
-            order_to_discard = db_client.fetch_order_to_discard(connection)
+            order_to_discard = db_client.fetch_order_to_discard(session)
+            db_client.delete_order(session, order_to_discard.id)
             order_to_discard_id = order_to_discard.id
-            db_client.delete_order(connection, order_to_discard_id)
 
-        db_client.insert_order(connection, order, StorageType.SHELF)
+        db_client.insert_order(session, order, StorageType.SHELF)
 
         if order_to_move_id:
-            action_log.move(order_to_move_id)
+            actions.put(ActionLog.get_move(order.id))
         elif order_to_discard_id:
-            action_log.discard(order_to_discard_id)
-        action_log.place(order.id)
+            actions.put(ActionLog.get_discard(order.id))
+        actions.put(ActionLog.place(order.id))
 
 
-def pickup_order(order: Order, db_client: DatabaseClient, action_log: ActionLog):
+def pickup_order(
+    order: Order,
+    db_client: DatabaseClient,
+    actions: Queue,
+):
+    db_config = DatabaseConfig()
+    session_factory = get_database_session_factory(get_database_session_pool(db_config))
+    session = session_factory()
+    try:
+        _pickup_order(order, db_client, actions, session)
+    except:
+        # TODO error handle
+        pass
+    finally:
+        session.close()
+
+
+def _pickup_order(
+    order: Order, db_client: DatabaseClient, actions: Queue, session: Session
+):
     # TODO handle discarded order
     # TODO we should probably retry here couple of times
-    with db_client as connection:
-        db_client.set_transaction_isolation_level(
-            connection, constants.TransactionIsolationLevel.READ_COMMITTED
-        )
-        db_client.delete_order(connection, order.id)
-        action_log.pickup(order.id)
+    with db_client.transaction(session, TransactionIsolationLevel.READ_COMMITTED):
+        db_client.delete_order(session, order.id)
+        actions.put(ActionLog.get_pickup(order.id))
 
 
 def _get_job_listener(job_map: Dict[str, bool]):
