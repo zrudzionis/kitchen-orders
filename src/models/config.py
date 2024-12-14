@@ -1,5 +1,5 @@
-import os
 from pydantic import BaseModel, Field, HttpUrl, model_validator
+from typing_extensions import Self
 
 
 class Config(BaseModel):
@@ -21,31 +21,32 @@ class Config(BaseModel):
     )
 
     @model_validator(mode="after")
-    def check_pickup_times(self):
+    def check_pickup_times(self) -> Self:
         if self.max_pickup < self.min_pickup:
             raise ValueError("max_pickup must be greater than or equal to min_pickup")
         return self
 
     @model_validator(mode="after")
-    def check_problem_file_path(self):
-        if self.problem_file_path:
-            try:
-                with open(self.problem_file_path, "r"):
-                    pass
-            except FileNotFoundError:
-                raise ValueError(f"Problem file not found: {self.problem_file_path}")
-            except PermissionError:
-                raise ValueError(
-                    f"Permission denied while opening problem file: {self.problem_file_path}"
-                )
-            except Exception as e:
-                raise ValueError(
-                    f"Error while opening problem file: {self.problem_file_path}. Error: {e}"
-                )
+    def check_problem_file_path(self) -> Self:
+        if not self.problem_file_path:
+            return self
+        try:
+            with open(self.problem_file_path, "r"):
+                pass
+        except FileNotFoundError:
+            raise ValueError(f"Problem file not found: {self.problem_file_path}")
+        except PermissionError:
+            raise ValueError(
+                f"Permission denied while opening problem file: {self.problem_file_path}"
+            )
+        except Exception as e:
+            raise ValueError(
+                f"Error while opening problem file: {self.problem_file_path}. Error: {e}"
+            )
         return self
 
     @model_validator(mode="after")
-    def check_problem_source(self):
+    def check_problem_source(self) -> Self:
         if not self.problem_file_path and (not self.auth or not self.endpoint):
             raise ValueError(
                 "Problem source must be provided (auth and endpoint) or (problem_file_path)"

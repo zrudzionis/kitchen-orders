@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from models.config import Config
 from scheduler.scheduler import schedule_problem_orders
 from src.scheduler.scheduler_utils import load_problem
+from src.validators.actions_validators import validate_actions
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,19 +23,26 @@ def schedule_orders():
     try:
         config = Config(**raw_config)
     except ValidationError as e:
-        return jsonify({"errors": e.errors()}), 400
+        errors = [error["msg"] for error in e.errors()]
+        return jsonify({"errors": errors}), 400
 
     problem = load_problem(config)
     if len(problem.orders) == 0:
-        return jsonify({"errors": f"Problem has not orders: {problem.to_dict()}"}), 400
+        return jsonify({"errors": f"Problem has no orders: {problem.to_dict()}"}), 400
 
     actions = schedule_problem_orders(problem, config)
 
+    try:
+        validate_actions(actions)
+    except ValueError as e:
+        logger.error("Order actions are invalid. Validation error: %s", e)
+
     return (
-        jsonify({"status": "OK", "actions": [action.to_dict() for action in actions]}),
+        jsonify({"actions": [action.to_dict() for action in actions]}),
         200,
     )
 
 
 if __name__ == "__main__":
+    # we would't do this in production
     app.run(debug=True)
