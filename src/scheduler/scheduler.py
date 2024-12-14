@@ -6,7 +6,7 @@ import random
 import time
 from typing import Dict, List
 
-from sqlalchemy.orm import Session
+from sqlalchemy import Connection, Engine
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -19,16 +19,15 @@ from constants import (
     MaxInventory,
     StorageType,
     JOBS_IN_PROGRESS_REPORTING_PERIOD_SECONDS,
+    TransactionIsolationLevel,
 )
-from src.clients.database.session_pool import (
-    get_database_session_pool,
-    get_database_session_factory,
+from src.clients.database.connection_pool import (
+    get_database_connection_pool,
 )
 from src.clients.database.database_client import DatabaseClient
 from models.action_log import ActionLog
 from models.database_config import DatabaseConfig
 from models.order import Order
-from src.clients.database.shared_session_context import SharedSessionContext
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +40,9 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
     job_listener = _get_job_listener(jobs_finished)
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
-    session_pool = get_database_session_pool(
+    connection_pool = get_database_connection_pool(
         DatabaseConfig(), max_connections=constants.MAX_DB_CONNECTIONS
     )
-    session_factory = get_database_session_factory(session_pool)
     db_client = DatabaseClient()
     action_log = ActionLog()
 
@@ -59,7 +57,7 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
             store_order,
             "date",
             run_date=store_order_time,
-            args=(order, db_client, action_log, session_factory),
+            args=(order, db_client, action_log, connection_pool),
             id=f"{order.id}_place",
         )
 
@@ -70,7 +68,7 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
             pickup_order,
             "date",
             run_date=pickup_order_time,
-            args=(order, db_client, action_log, session_factory),
+            args=(order, db_client, action_log, connection_pool),
             id=f"{order.id}_pickup",
         )
 
@@ -82,7 +80,7 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
 
     scheduler.shutdown(wait=True)
 
-    session_pool.dispose()
+    connection_pool.dispose()
 
     return action_log.get_snapshot()
 
@@ -91,22 +89,34 @@ def store_order(
     order: Order,
     db_client: DatabaseClient,
     action_log: ActionLog,
-    session_factory: callable,
+    session_pool: Engine,
 ):
-    with SharedSessionContext(session_factory) as session:
+    with session_pool.connect() as connection:
         # TODO remove this
         logger.info(f"Placing order: {order.id}")
-        _store_order(order, db_client, action_log, session)
+        _store_order(order, db_client, action_log, connection)
 
 
 def _store_order(
-    order: Order, db_client: DatabaseClient, action_log: ActionLog, session: Session
+    order: Order,
+    db_client: DatabaseClient,
+    action_log: ActionLog,
+    connection: Connection,
 ):
+    # TODO remove this
+    logger.info(f"{order.id}. Session in transaction: {connection.in_transaction()}")
+
     try:
-        inventory = db_client.fetch_inventory(session)
+        with db_client.transaction(connection):
+            inventory = db_client.fetch_inventory(connection)
     except Exception as e:
         logger.error(f"Unexepected error while fetching inventory. Error: {e}")
         raise
+
+    # TODO remove this
+    logger.info(
+        f"{order.id}. Session in transaction after fetch inventory: {connection.in_transaction()}"
+    )
 
     shelf_available = inventory.shelf < MaxInventory.SHELF
     best_storage_available = (
@@ -123,32 +133,31 @@ def _store_order(
     # TODO add retries
 
     if best_storage_available:
-        _place_order_to_best_storage(order, db_client, action_log, session)
+        _place_order_to_best_storage(order, db_client, action_log, connection)
     elif shelf_available:
-        _place_order_when_best_storage_is_full(order, db_client, action_log, session)
+        _place_order_when_best_storage_is_full(order, db_client, action_log, connection)
     else:
-        _place_order_when_no_space_left(order, db_client, action_log, session)
+        _place_order_when_no_space_left(order, db_client, action_log, connection)
 
 
 def _place_order_to_best_storage(
     order: Order,
     db_client: DatabaseClient,
     actions_log: ActionLog,
-    session,
+    connection: Connection,
 ) -> None:
-    db_client.insert_order(session, order, order.temp)
-    actions_log.place(order.id)
-    # TODO remove
-    logger.info(f"After place best storage actions: {actions_log.get_snapshot()}")
+    with db_client.transaction(connection, TransactionIsolationLevel.READ_COMMITTED):
+        db_client.insert_order(connection, order, order.temp)
+        actions_log.place(order.id)
 
 
 def _place_order_when_best_storage_is_full(
     order: Order,
     db_client: DatabaseClient,
     action_log: ActionLog,
-    session: Session,
+    connection: Connection,
 ) -> None:
-    db_client.insert_order(session, order, StorageType.SHELF)
+    db_client.insert_order(connection, order, StorageType.SHELF)
     action_log.place(order.id)
 
 
@@ -156,25 +165,25 @@ def _place_order_when_no_space_left(
     order: Order,
     db_client: DatabaseClient,
     action_log: ActionLog,
-    session: Session,
+    connection: Connection,
 ) -> None:
-    order_to_move = db_client.fetch_order_to_move(session)
+    order_to_move = db_client.fetch_order_to_move(connection)
     order_to_move_id = order_to_discard_id = None
 
     if order_to_move:
         db_client.move_order(
-            session,
+            connection,
             order_to_move.storage_type,
             order_to_move.order.temp,
             order_to_move.id,
         )
         order_to_move_id = order_to_move.id
     else:
-        order_to_discard = db_client.fetch_order_to_discard(session)
-        db_client.delete_order(session, order_to_discard.id)
+        order_to_discard = db_client.fetch_order_to_discard(connection)
+        db_client.delete_order(connection, order_to_discard.id)
         order_to_discard_id = order_to_discard.id
 
-    db_client.insert_order(session, order, StorageType.SHELF)
+    db_client.insert_order(connection, order, StorageType.SHELF)
 
     if order_to_move_id:
         action_log.move(order.id)
@@ -187,21 +196,25 @@ def pickup_order(
     order: Order,
     db_client: DatabaseClient,
     action_log: ActionLog,
-    session_factory: callable,
+    session_pool: Engine,
 ):
-    with SharedSessionContext(session_factory) as session:
+    with session_pool.connect() as connection:
         # TODO remove
         logger.info(f"Picking up order: {order.id}")
-        _pickup_order(order, db_client, action_log, session)
+        _pickup_order(order, db_client, action_log, connection)
 
 
 def _pickup_order(
-    order: Order, db_client: DatabaseClient, action_log: ActionLog, session: Session
+    order: Order,
+    db_client: DatabaseClient,
+    action_log: ActionLog,
+    connection: Connection,
 ):
-    # TODO handle discarded order
-    # TODO we should probably retry here couple of times
-    db_client.delete_order(session, order.id)
-    action_log.pickup(order.id)
+    with db_client.transaction(connection, TransactionIsolationLevel.READ_COMMITTED):
+        # TODO handle discarded order
+        # TODO we should probably retry here couple of times
+        db_client.delete_order(connection, order.id)
+        action_log.pickup(order.id)
 
 
 def _get_job_listener(job_map: Dict[str, bool]):

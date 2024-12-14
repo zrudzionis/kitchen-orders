@@ -8,7 +8,7 @@ from models.thread_safe_list import ThreadSafeList
 
 class ActionLog:
     def __init__(self, actions: ThreadSafeList = None):
-        if not actions:
+        if actions is None:
             self._actions = ThreadSafeList()
         else:
             self._actions = actions

@@ -1,7 +1,6 @@
 from contextlib import contextmanager
 from typing import Optional, ContextManager
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, Connection
 
 from constants import (
     StorageType,
@@ -14,9 +13,9 @@ from models.storage_order import StorageOrder
 
 
 class DatabaseClient:
-    def fetch_inventory(self, session: Session) -> Inventory:
-        result = session.execute(
-            text("SELECT storage_type, inventory_count FROM inventory;")
+    def fetch_inventory(self, connection: Connection) -> Inventory:
+        result = connection.execute(
+            text("SELECT storage_type, inventory_count FROM inventory;"),
         )
         inventory_map = {row[0]: row[1] for row in result}
         return Inventory(
@@ -25,8 +24,8 @@ class DatabaseClient:
             shelf=inventory_map[StorageType.SHELF],
         )
 
-    def fetch_order_to_move(self, session: Session) -> Optional[StorageOrder]:
-        result = session.execute(
+    def fetch_order_to_move(self, connection: Connection) -> Optional[StorageOrder]:
+        result = connection.execute(
             text(
                 """
                 SELECT
@@ -48,7 +47,7 @@ class DatabaseClient:
 
         storage_types_str = "('" + "', '".join(storage_types) + "')"
 
-        result = session.execute(
+        result = connection.execute(
             text(
                 f"""
                 SELECT
@@ -87,8 +86,8 @@ class DatabaseClient:
         order = Order(order_id, order_name, best_storage_type, fresh_max_age)
         return StorageOrder(storage_type, age, order)
 
-    def fetch_order_to_discard(self, session: Session) -> Optional[StorageOrder]:
-        result = session.execute(
+    def fetch_order_to_discard(self, connection: Connection) -> Optional[StorageOrder]:
+        result = connection.execute(
             text(
                 """
                 SELECT
@@ -121,9 +120,9 @@ class DatabaseClient:
         return storage_order
 
     def move_order(
-        self, session: Session, from_storage: str, to_storage: str, order_id: str
+        self, connection: Connection, from_storage: str, to_storage: str, order_id: str
     ) -> None:
-        session.execute(
+        connection.execute(
             text(
                 """
                 WITH updated_inventory AS (
@@ -147,9 +146,11 @@ class DatabaseClient:
             },
         )
 
-    def insert_order(self, session: Session, order: Order, storage_type: str) -> None:
+    def insert_order(
+        self, connection: Connection, order: Order, storage_type: str
+    ) -> None:
         """Insert a new order into the order_storage table and update inventory."""
-        session.execute(
+        connection.execute(
             text(
                 """
                 WITH inserted_order AS (
@@ -173,9 +174,9 @@ class DatabaseClient:
             },
         )
 
-    def delete_order(self, session: Session, order_id: str) -> None:
+    def delete_order(self, connection: Connection, order_id: str) -> None:
         """Delete an order from the order_storage table and update inventory."""
-        result = session.execute(
+        result = connection.execute(
             text(
                 """
                 WITH deleted_order AS (
@@ -199,18 +200,15 @@ class DatabaseClient:
     @contextmanager
     def transaction(
         self,
-        session: Session,
+        connection: Connection,
         isolation_level: TransactionIsolationLevel = TransactionIsolationLevel.READ_COMMITTED,
-    ) -> ContextManager[Session]:
+    ):
+
+        connection = connection.execution_options(isolation_level=isolation_level.value)
         try:
-            session.begin()
-            session.execute(
-                text(f"SET TRANSACTION ISOLATION LEVEL {isolation_level.value};")
-            )
-            yield session
-            session.commit()
+            connection.begin()
+            yield connection
+            connection.commit()
         except Exception:
-            session.rollback()
+            connection.rollback()
             raise
-        finally:
-            session.close()
