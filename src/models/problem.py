@@ -13,8 +13,8 @@ class Problem:
 
     def to_dict(self):
         return dict(
-            test_id=self.test_id, orders=[order.to_dict() for order in self.orders]
-        )
+            test_id=self.test_id, orders=[
+                order.to_dict() for order in self.orders])
 
     @staticmethod
     def from_dict(data: Dict):

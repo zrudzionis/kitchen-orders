@@ -1,0 +1,8 @@
+version: '3.9'
+
+services:
+  lint:
+    container_name: lint
+    build:
+      context: .
+      dockerfile: lint-Dockerfile

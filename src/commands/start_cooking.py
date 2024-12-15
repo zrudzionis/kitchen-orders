@@ -1,8 +1,8 @@
 import logging
-import os
 
 from pydantic import ValidationError
 from typer import Argument
+import requests
 
 from src import constants
 from src.models.config import Config
@@ -41,19 +41,20 @@ def start_cooking(
             endpoint=endpoint,
             problem_file_path=problem_file_path,
         )
-        logger.info("Starting to cook")
         _start_cooking(config)
     except ValidationError as e:
-        logger.error(f"Command line arguments validation error: {e.errors()}")
-    finally:
-        _cleanup()
+        errors = [error["msg"] for error in e.errors()]
+        logger.error(f"Command line arguments validation errors: {errors}")
 
 
 def _start_cooking(config: Config):
-    with open(constants.COOKING_IN_PROGRESS_FILE_PATH, "w") as fp:
-        fp.write(config.model_dump_json())
-
-
-def _cleanup():
-    if os.path.exists(constants.COOKING_IN_PROGRESS_FILE_PATH):
-        os.remove(constants.COOKING_IN_PROGRESS_FILE_PATH)
+    logger.info("Starting to cook.")
+    response = requests.post(
+        constants.SCHEDULE_ORDERS_ENDPOINT,
+        json=config.model_dump(),
+        timeout=None,
+    )
+    if response.ok:
+        logger.info(f"OK response: {response.json()}")
+    else:
+        logger.error(f"Status code: {response.status_code}. Message: {response.text}")

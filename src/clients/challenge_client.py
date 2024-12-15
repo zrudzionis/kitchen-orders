@@ -1,10 +1,11 @@
 import json
 import random
-import requests
-from requests.utils import quote
 from datetime import timedelta
 from typing import List
 from logging import getLogger
+
+import requests
+from requests.utils import quote
 
 from models.action import Action
 from models.order import Order
@@ -14,16 +15,18 @@ logger = getLogger(__name__)
 
 
 class ChallengeClient:
-    def __init__(self, endpoint: str, auth: str):
+    def __init__(self, endpoint: str, auth: str, fetch_problem_timeout_seconds=15, submit_timeout_seconds=30):
         self.endpoint = endpoint
         self.auth = auth
+        self.fetch_problem_timeout_seconds = fetch_problem_timeout_seconds
+        self.submit_timeout_seconds = submit_timeout_seconds
 
     def fetch_problem(self, name: str, seed: int = 0) -> Problem:
         if seed == 0:
-            seed = random.randint(1, 1 << 63)  # Mimics Java's Random().nextLong()
+            seed = random.randint(1, 1 << 63)
 
         url = f"{self.endpoint}/interview/challenge/new?auth={self.auth}&name={quote(name)}&seed={seed}"
-        response = requests.get(url, headers={"Accept": "application/json"})
+        response = requests.get(url, headers={"Accept": "application/json"}, timeout=self.fetch_problem_timeout_seconds)
         response.raise_for_status()
         test_id = response.headers.get("x-test-id")
         logger.info(f"Fetched new test problem, id={test_id}: {url}")
@@ -40,7 +43,7 @@ class ChallengeClient:
         solution = Solution(options=Options(rate, min_time, max_time), actions=actions)
         url = f"{self.endpoint}/interview/challenge/solve?auth={self.auth}"
         headers = {"Content-Type": "application/json", "x-test-id": test_id}
-        response = requests.post(url, data=solution.encode(), headers=headers)
+        response = requests.post(url, data=solution.encode(), headers=headers, timeout=self.submit_timeout_seconds)
         response.raise_for_status()
         return response.text
 

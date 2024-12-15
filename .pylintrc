@@ -1,0 +1,20 @@
+[MAIN]
+source-roots=./src/,./test/
+disable=
+    missing-docstring,
+    too-few-public-methods,
+    use-dict-literal,
+    pointless-statement,
+    consider-using-set-comprehension,
+    too-many-arguments,
+    too-many-positional-arguments,
+    logging-fstring-interpolation,
+    too-many-locals
+
+ignore-patterns=_.*\.py
+
+
+[FORMAT]
+
+# Maximum number of characters on a single line.
+max-line-length=120

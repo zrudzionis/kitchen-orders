@@ -32,4 +32,3 @@ def report_on_job_progress(jobs_finished: Dict[str, bool]):
             logger.info(f"Jobs in progress: {jobs_in_progress}")
         time.sleep(1)
         passed_seconds += 1
-

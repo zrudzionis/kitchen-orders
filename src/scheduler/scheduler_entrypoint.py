@@ -28,7 +28,8 @@ def schedule_orders():
 
     problem = load_problem(config)
     if len(problem.orders) == 0:
-        return jsonify({"errors": f"Problem has no orders: {problem.to_dict()}"}), 400
+        return jsonify(
+            {"errors": f"Problem has no orders: {problem.to_dict()}"}), 400
 
     actions = schedule_problem_orders(problem, config)
 

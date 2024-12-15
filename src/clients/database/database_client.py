@@ -24,7 +24,9 @@ class DatabaseClient:
             shelf=inventory_map[StorageType.SHELF],
         )
 
-    def fetch_order_to_move(self, connection: Connection) -> Optional[StorageOrder]:
+    def fetch_order_to_move(
+            self,
+            connection: Connection) -> Optional[StorageOrder]:
         result = connection.execute(
             text(
                 """
@@ -86,7 +88,9 @@ class DatabaseClient:
         order = Order(order_id, order_name, best_storage_type, fresh_max_age)
         return StorageOrder(storage_type, age, order)
 
-    def fetch_order_to_discard(self, connection: Connection) -> Optional[StorageOrder]:
+    def fetch_order_to_discard(
+            self,
+            connection: Connection) -> Optional[StorageOrder]:
         result = connection.execute(
             text(
                 """
@@ -119,7 +123,12 @@ class DatabaseClient:
         storage_order = StorageOrder(storage_type, age, order)
         return storage_order
 
-    def move_order(self, connection: Connection, from_storage: str, to_storage: str, order_id: str) -> None:
+    def move_order(
+            self,
+            connection: Connection,
+            from_storage: str,
+            to_storage: str,
+            order_id: str) -> None:
         connection.execute(
             text(
                 """
@@ -144,7 +153,11 @@ class DatabaseClient:
             },
         )
 
-    def insert_order(self, connection: Connection, order: Order, storage_type: str) -> None:
+    def insert_order(
+            self,
+            connection: Connection,
+            order: Order,
+            storage_type: str) -> None:
         """Insert a new order into the order_storage table and update inventory."""
         connection.execute(
             text(
@@ -170,7 +183,10 @@ class DatabaseClient:
             },
         )
 
-    def delete_order_if_exists(self, connection: Connection, order_id: str) -> bool:
+    def delete_order_if_exists(
+            self,
+            connection: Connection,
+            order_id: str) -> bool:
         """
         Delete an order from the order_storage table and update inventory.
         If order doesn't exist return False.
@@ -212,7 +228,10 @@ class DatabaseClient:
 
         return result.rowcount
 
-    def fetch_order_if_exists(self, connection: Connection, order_id: str) -> Optional[StorageOrder]:
+    def fetch_order_if_exists(
+            self,
+            connection: Connection,
+            order_id: str) -> Optional[StorageOrder]:
         """
         Returns number of deleted orders.
         """
@@ -262,7 +281,8 @@ class DatabaseClient:
         isolation_level: TransactionIsolationLevel = TransactionIsolationLevel.READ_COMMITTED,
     ):
 
-        connection = connection.execution_options(isolation_level=isolation_level.value)
+        connection = connection.execution_options(
+            isolation_level=isolation_level.value)
         try:
             connection.begin()
             yield connection

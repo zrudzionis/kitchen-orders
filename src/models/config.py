@@ -10,11 +10,13 @@ class Config(BaseModel):
         ge=1,
         description="The rate at which orders should be placed in milliseconds",
     )
-    min_pickup: int = Field(4, ge=1, description="Minimum pickup time in seconds")
-    max_pickup: int = Field(8, ge=1, description="Maximum pickup time in seconds")
+    min_pickup: int = Field(
+        4, ge=1, description="Minimum pickup time in seconds")
+    max_pickup: int = Field(
+        8, ge=1, description="Maximum pickup time in seconds")
     endpoint: HttpUrl = Field(
-        "https://api.cloudkitchens.com", description="Problem server endpoint"
-    )
+        "https://api.cloudkitchens.com",
+        description="Problem server endpoint")
     problem_file_path: str = Field(
         None,
         description="Problem file path used for local testing outside docker environment.",
@@ -23,7 +25,8 @@ class Config(BaseModel):
     @model_validator(mode="after")
     def check_pickup_times(self) -> Self:
         if self.max_pickup < self.min_pickup:
-            raise ValueError("max_pickup must be greater than or equal to min_pickup")
+            raise ValueError(
+                "max_pickup must be greater than or equal to min_pickup")
         return self
 
     @model_validator(mode="after")
@@ -31,24 +34,22 @@ class Config(BaseModel):
         if not self.problem_file_path:
             return self
         try:
-            with open(self.problem_file_path, "r"):
+            with open(self.problem_file_path, "r", encoding="utf-8"):
                 pass
-        except FileNotFoundError:
-            raise ValueError(f"Problem file not found: {self.problem_file_path}")
-        except PermissionError:
+        except FileNotFoundError as e:
             raise ValueError(
-                f"Permission denied while opening problem file: {self.problem_file_path}"
-            )
+                f"Problem file not found: {self.problem_file_path}") from e
+        except PermissionError as e:
+            raise ValueError(
+                f"Permission denied while opening problem file: {self.problem_file_path}") from e
         except Exception as e:
             raise ValueError(
-                f"Error while opening problem file: {self.problem_file_path}. Error: {e}"
-            )
+                f"Error while opening problem file: {self.problem_file_path}. Error: {e}") from e
         return self
 
     @model_validator(mode="after")
     def check_problem_source(self) -> Self:
         if not self.problem_file_path and (not self.auth or not self.endpoint):
             raise ValueError(
-                "Problem source must be provided (auth and endpoint) or (problem_file_path)"
-            )
+                "Problem source must be provided (auth and endpoint) or (problem_file_path)")
         return self

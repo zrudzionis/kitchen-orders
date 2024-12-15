@@ -1,7 +1,8 @@
 from enum import Enum
 import os
 
-
+WEB_SERVER_ENDPOINT = "http://localhost:8000"
+SCHEDULE_ORDERS_ENDPOINT = f"{WEB_SERVER_ENDPOINT}/schedule-orders"
 MAX_DB_CONNECTIONS = 20
 MAX_WORKERS = 20
 MAX_WAIT_DB_CONNECTION_SECONDS = 1
@@ -39,4 +40,5 @@ class TransactionIsolationLevel(Enum):
         return self.value
 
 
-TRANSACTION_ISOLATION_LEVELS = [level.value for level in TransactionIsolationLevel]
+TRANSACTION_ISOLATION_LEVELS = [
+    level.value for level in TransactionIsolationLevel]

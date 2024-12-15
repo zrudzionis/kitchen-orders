@@ -8,6 +8,7 @@ def validate_serialized_actions(serialized_actions: List[dict]):
         Action(
             **{
                 **action,
+                "action_id": action.pop("id"),
                 "timestamp": datetime.fromtimestamp(
                     action.pop("timestamp") / 1_000_000, tz=timezone.utc
                 ),
@@ -43,8 +44,8 @@ def _validate_single_place_pickup_discard_per_order(actions: List[Action]):
 def _validate_orders_have_place_and_pickup(actions: List[Action]):
     order_ids = set([action.id for action in actions])
     action_map = dict(
-        (f"{action.id}-{action.action_type}", action.timestamp) for action in actions
-    )
+        (f"{action.id}-{action.action_type}",
+         action.timestamp) for action in actions)
 
     for order_id in order_ids:
         place = action_map.get(f"{order_id}-{Action.PLACE}")
@@ -61,8 +62,8 @@ def _validate_orders_have_place_and_pickup(actions: List[Action]):
 def _validate_pickup_or_discard_happens_after_place(actions: List[Action]):
     order_ids = set([action.id for action in actions])
     action_map = dict(
-        (f"{action.id}-{action.action_type}", action.timestamp) for action in actions
-    )
+        (f"{action.id}-{action.action_type}",
+         action.timestamp) for action in actions)
 
     for order_id in order_ids:
         place = action_map.get(f"{order_id}-{Action.PLACE}")

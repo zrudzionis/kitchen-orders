@@ -2,8 +2,8 @@ from typing import Dict, List
 
 
 class Order:
-    def __init__(self, id: str, name: str, temp: str, freshness: int):
-        self.id = id
+    def __init__(self, order_id: str, name: str, temp: str, freshness: int):
+        self.id = order_id
         self.name = name
         self.temp = temp
         self.freshness = freshness
@@ -15,7 +15,7 @@ class Order:
     @staticmethod
     def from_dict(order_dict: Dict) -> str:
         return Order(
-            id=order_dict["id"],
+            order_id=order_dict["id"],
             name=order_dict["name"],
             temp=order_dict["temp"],
             freshness=order_dict["freshness"],

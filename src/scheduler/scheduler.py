@@ -13,11 +13,10 @@ import constants
 from models.config import Config
 from models.problem import Problem
 from models.action import Action
-
-from clients.database.connection_pool import get_database_connection_pool
-from clients.database.database_client import DatabaseClient
 from models.action_log import ActionLog
 from models.database_config import DatabaseConfig
+from clients.database.connection_pool import get_database_connection_pool
+from clients.database.database_client import DatabaseClient
 from jobs.job_utils import report_on_job_progress, get_job_listener
 from jobs.place_order import place_order
 from jobs.pickup_order import pickup_order
@@ -34,9 +33,7 @@ def schedule_problem_orders(problem: Problem, config: Config) -> List[Action]:
     job_listener = get_job_listener(jobs_finished)
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
-    connection_pool = get_database_connection_pool(
-        DatabaseConfig(), max_connections=constants.MAX_DB_CONNECTIONS
-    )
+    connection_pool = get_database_connection_pool(DatabaseConfig(), max_connections=constants.MAX_DB_CONNECTIONS)
     db_client = DatabaseClient()
     action_log = ActionLog()
 

@@ -13,5 +13,6 @@ class StorageOrder:
 
     def to_dict(self) -> str:
         return dict(
-            storage_type=self.storage_type, age=self.age, order=self.order.to_dict()
-        )
+            storage_type=self.storage_type,
+            age=self.age,
+            order=self.order.to_dict())

@@ -14,12 +14,17 @@ from src.models.action import Action
 class TestPickupOrder(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.connection_pool = get_database_connection_pool(DatabaseConfig(), max_connections=2)
+        cls.connection_pool = get_database_connection_pool(
+            DatabaseConfig(), max_connections=2)
         cls.connection = cls.connection_pool.connect()
         cls.db_client = DatabaseClient()
 
-    def assertActionsEqual(self, action_log: ActionLog, expected_actions: List[str]):
-        got_actions = [action.action_type for action in action_log.get_snapshot()]
+    def assert_actions_equal(
+            self,
+            action_log: ActionLog,
+            expected_actions: List[str]):
+        got_actions = [
+            action.action_type for action in action_log.get_snapshot()]
         msg = f"Expected: {expected_actions}, got: {got_actions}"
 
         self.assertEqual(len(got_actions), len(expected_actions), msg)
@@ -34,7 +39,7 @@ class TestPickupOrder(unittest.TestCase):
             action_log=action_log,
             connection_pool=self.connection_pool,
         )
-        self.assertActionsEqual(action_log, [])
+        self.assert_actions_equal(action_log, [])
 
     def test_when_we_have_orders_in_hot_storage_then_picks_up_one_order(self):
         for i in range(MaxInventory.HOT):
@@ -53,7 +58,7 @@ class TestPickupOrder(unittest.TestCase):
             connection_pool=self.connection_pool,
         )
 
-        self.assertActionsEqual(action_log, [Action.PICKUP])
+        self.assert_actions_equal(action_log, [Action.PICKUP])
 
     def tearDown(self):
         self.db_client.delete_all_orders(self.connection)

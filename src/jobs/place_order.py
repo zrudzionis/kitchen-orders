@@ -24,10 +24,8 @@ def place_order(
         with connection_pool.connect() as connection:
             _place_order(order, db_client, action_log, connection)
     except IntegrityError as e:
-        logger.error(
-            f"Integrity error while placing an order. Order ID: {order.id}. Error: {e}"
-        )
-        raise RetryException()
+        logger.error(f"Integrity error while placing an order. Order ID: {order.id}. Error: {e}")
+        raise RetryException() from e
 
 
 def _place_order(
@@ -52,7 +50,8 @@ def _place_order(
     )
 
     logger.debug(
-        f"Placing order. Order ID: {order.id}. Best storage available: {best_storage_available}. Shelf available: {shelf_available}."
+        f"Placing order. Order ID: {order.id}. Best storage available: {best_storage_available}."
+        f"Shelf available: {shelf_available}."
     )
     if best_storage_available:
         _place_order_to_best_storage(order, db_client, action_log, connection)
@@ -71,9 +70,7 @@ def _place_order_to_best_storage(
     with db_client.transaction(connection, TransactionIsolationLevel.READ_COMMITTED):
         db_client.insert_order(connection, order, order.temp)
     actions_log.place(order.id)
-    logger.debug(
-        f"Action place. Order ID: {order.id}. Storage: {order.temp}. Best storage."
-    )
+    logger.debug(f"Action place. Order ID: {order.id}. Storage: {order.temp}. Best storage.")
 
 
 def _place_order_when_best_storage_is_full(
@@ -122,11 +119,10 @@ def _move_order_and_place_order(
     action_log.move(order_to_move.id)
     action_log.place(order_to_place.id)
     logger.debug(
-        f"Action move. Order ID: {order_to_move.id}. From: {order_to_move.storage_type}. To: {order_to_move.order.temp}."
+        f"Action move. Order ID: {order_to_move.id}. From: {order_to_move.storage_type}."
+        f" To: {order_to_move.order.temp}."
     )
-    logger.debug(
-        f"Action place. Order ID: {order_to_place.id}. Storage: {StorageType.SHELF}."
-    )
+    logger.debug(f"Action place. Order ID: {order_to_place.id}. Storage: {StorageType.SHELF}.")
     return True
 
 
@@ -140,22 +136,14 @@ def _discard_order_and_place_order(
         order_to_discard = db_client.fetch_order_to_discard(connection)
 
         if not order_to_discard:
-            logger.debug(
-                f"Order to discard not found while trying to place order: {order_to_place.id}."
-            )
+            logger.debug(f"Order to discard not found while trying to place order: {order_to_place.id}.")
             raise ValueError("Order to discard not found.")
 
-        order_deleted = db_client.delete_order_if_exists(
-            connection, order_to_discard.id
-        )
+        order_deleted = db_client.delete_order_if_exists(connection, order_to_discard.id)
         db_client.insert_order(connection, order_to_place, StorageType.SHELF)
 
     if order_deleted:
         action_log.discard(order_to_discard.id)
-        logger.debug(
-            f"Action discard. Order ID: {order_to_discard.id}. Storage: {order_to_discard.storage_type}."
-        )
+        logger.debug(f"Action discard. Order ID: {order_to_discard.id}. Storage: {order_to_discard.storage_type}.")
     action_log.place(order_to_place.id)
-    logger.debug(
-        f"Action place. Order ID: {order_to_place.id}. Storage: {StorageType.SHELF}."
-    )
+    logger.debug(f"Action place. Order ID: {order_to_place.id}. Storage: {StorageType.SHELF}.")

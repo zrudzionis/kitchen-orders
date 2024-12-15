@@ -27,10 +27,8 @@ def pickup_order(
         with connection_pool.connect() as connection:
             _pickup_order(order, db_client, action_log, connection)
     except IntegrityError as e:
-        logger.error(
-            f"Integrity error while picking up order. Order ID: {order.id}. Error: {e}"
-        )
-        raise RetryException()
+        logger.error(f"Integrity error while picking up order. Order ID: {order.id}. Error: {e}")
+        raise RetryException() from e
 
 
 def _pickup_order(
@@ -45,6 +43,4 @@ def _pickup_order(
             action_log.pickup(order.id)
             logger.debug(f"Action pickup. Order ID: {order.id}")
         else:
-            logger.debug(
-                f"Can't delete order that is not in database. Order ID: {order.id}"
-            )
+            logger.debug(f"Can't delete order that is not in database. Order ID: {order.id}")
