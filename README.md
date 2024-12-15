@@ -144,6 +144,12 @@ Run tests:
 docker-compose -f docker-compose.test.yml build test && docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from test
 ```
 
+Discard any state:
+
+```
+docker-compose down --remove-orphans --volumes
+```
+
 ## Thoughts on solution
 
 We would have a "order_storage" table with the following columns:
