@@ -174,8 +174,11 @@ class DatabaseClient:
             },
         )
 
-    def delete_order(self, connection: Connection, order_id: str) -> None:
-        """Delete an order from the order_storage table and update inventory."""
+    def delete_order_if_exists(self, connection: Connection, order_id: str) -> bool:
+        """
+        Delete an order from the order_storage table and update inventory.
+        If order doesn't exist return False.
+        """
         result = connection.execute(
             text(
                 """
@@ -192,10 +195,7 @@ class DatabaseClient:
             {"order_id": order_id},
         )
 
-        if result.rowcount == 0:
-            raise ValueError(
-                f"Failed to delete order with id {order_id}. Order not found."
-            )
+        return result.rowcount == 1
 
     @contextmanager
     def transaction(

@@ -2,6 +2,15 @@ from enum import Enum
 import os
 
 
+MAX_DB_CONNECTIONS = 20
+MAX_WORKERS = 20
+MAX_WAIT_DB_CONNECTION_SECONDS = 1
+JOBS_IN_PROGRESS_REPORTING_PERIOD_SECONDS = 5
+# make sure that all jobs are placed in a schedule before starting
+JOBS_INITIAL_DELAY_SECONDS = 3
+MAX_PICKUP_ORDER_TRIES = 3
+MAX_PLACE_ORDER_TRIES = 3
+
 WORKING_DIR_PATH = "."
 SHARED_VOLUME = os.path.join(WORKING_DIR_PATH, "containers_data")
 ORDERS_SCHEDULE_FILE_PATH = os.path.join(SHARED_VOLUME, "orders-schedule.json")
@@ -31,10 +40,3 @@ class TransactionIsolationLevel(Enum):
 
 
 TRANSACTION_ISOLATION_LEVELS = [level.value for level in TransactionIsolationLevel]
-
-MAX_DB_CONNECTIONS = 20
-MAX_WORKERS = 20
-MAX_WAIT_DB_CONNECTION_SECONDS = 1
-JOBS_IN_PROGRESS_REPORTING_PERIOD_SECONDS = 5
-# make sure that all jobs are placed in a schedule before starting
-JOBS_INITIAL_DELAY_SECONDS = 3

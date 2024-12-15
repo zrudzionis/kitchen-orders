@@ -34,6 +34,7 @@ def schedule_orders():
 
     try:
         validate_actions(actions)
+        logger.info("Order actions are valid.")
     except ValueError as e:
         logger.error("Order actions are invalid. Validation error: %s", e)
 
