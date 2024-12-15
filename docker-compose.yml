@@ -45,6 +45,7 @@ services:
       timeout: 5s
       retries: 10
 
+  # Service used to inspect database. Use "db" for hostname.
   adminer:
     image: adminer
     container_name: adminer

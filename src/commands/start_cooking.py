@@ -1,7 +1,7 @@
 import logging
 
 from pydantic import ValidationError
-from typer import Argument
+from typer import Option
 import requests
 
 from src import constants
@@ -11,22 +11,23 @@ logger = logging.getLogger(__name__)
 
 
 def start_cooking(
-    auth: str = Argument(
+    auth: str = Option(
+        default="",
         help="Authentication token (required)",
     ),
-    seed: int = Argument(help="Problem seed (random if zero)", default=0, min=0),
-    order_rate: int = Argument(
-        help="The rate at which orders should be placed in miliseconds",
+    seed: int = Option(default=0, min=0, help="Problem seed (random if zero)"),
+    order_rate: int = Option(
         default=500,
         min=1,
+        help="The rate at which orders should be placed in miliseconds",
     ),
-    min_pickup: int = Argument(help="Minimum pickup time in seconds", default=4, min=1),
-    max_pickup: int = Argument(help="Maximum pickup time in seconds", default=8, min=1),
-    endpoint: str = Argument(
+    min_pickup: int = Option(default=4, min=1, help="Minimum pickup time in seconds"),
+    max_pickup: int = Option(default=8, min=1, help="Maximum pickup time in seconds"),
+    endpoint: str = Option(
         default="https://api.cloudkitchens.com",
         help="Problem server endpoint",
     ),
-    problem_file_path: str = Argument(
+    problem_file_path: str = Option(
         default="",
         help="Problem used for local testing outside docker container.",
     ),
@@ -49,9 +50,13 @@ def start_cooking(
 
 def _start_cooking(config: Config):
     logger.info("Starting to cook.")
+    config_dict = config.model_dump()
+
+    logger.info(f"Requesting web server to solve problem with config: {config_dict}")
+
     response = requests.post(
         constants.SCHEDULE_ORDERS_ENDPOINT,
-        json=config.model_dump(),
+        json=config_dict,
         timeout=None,
     )
     if response.ok:

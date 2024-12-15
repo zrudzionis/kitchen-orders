@@ -40,6 +40,8 @@ Start cooking (solving problem). Run this command with `--help` flag to see full
 python3 entrypoint.py start-cooking
 ```
 
+![screenshot](./images/start-cooking-help.png)
+
 ### If you don't want to install python
 
 Start containers. Once we start containers we can continue using them on new problems.

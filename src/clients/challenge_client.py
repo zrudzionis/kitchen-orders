@@ -16,7 +16,7 @@ logger = getLogger(__name__)
 
 class ChallengeClient:
     def __init__(self, endpoint: str, auth: str, fetch_problem_timeout_seconds=15, submit_timeout_seconds=30):
-        self.endpoint = endpoint
+        self.endpoint = endpoint.rstrip('/')
         self.auth = auth
         self.fetch_problem_timeout_seconds = fetch_problem_timeout_seconds
         self.submit_timeout_seconds = submit_timeout_seconds
