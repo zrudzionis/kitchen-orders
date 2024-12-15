@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import Optional, ContextManager
+from typing import Optional
 from sqlalchemy import text, Connection
 
 from constants import (
@@ -119,9 +119,7 @@ class DatabaseClient:
         storage_order = StorageOrder(storage_type, age, order)
         return storage_order
 
-    def move_order(
-        self, connection: Connection, from_storage: str, to_storage: str, order_id: str
-    ) -> None:
+    def move_order(self, connection: Connection, from_storage: str, to_storage: str, order_id: str) -> None:
         connection.execute(
             text(
                 """
@@ -146,9 +144,7 @@ class DatabaseClient:
             },
         )
 
-    def insert_order(
-        self, connection: Connection, order: Order, storage_type: str
-    ) -> None:
+    def insert_order(self, connection: Connection, order: Order, storage_type: str) -> None:
         """Insert a new order into the order_storage table and update inventory."""
         connection.execute(
             text(
@@ -196,6 +192,68 @@ class DatabaseClient:
         )
 
         return result.rowcount == 1
+
+    def delete_all_orders(self, connection: Connection) -> int:
+        """
+        Returns number of deleted orders.
+        """
+        result = connection.execute(
+            text(
+                """
+                WITH deleted_order AS (
+                    DELETE FROM order_storage
+                    RETURNING storage_type
+                )
+                UPDATE inventory
+                SET inventory_count = 0;
+                """,
+            ),
+        )
+
+        return result.rowcount
+
+    def fetch_order_if_exists(self, connection: Connection, order_id: str) -> Optional[StorageOrder]:
+        """
+        Returns number of deleted orders.
+        """
+        result = connection.execute(
+            text(
+                """
+                SELECT
+                    order_id,
+                    order_name,
+                    storage_type,
+                    best_storage_type,
+                    fresh_max_age,
+                    cumulative_age +
+                        CASE
+                            WHEN storage_type = best_storage_type THEN
+                                EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at))
+                            ELSE
+                                2 * EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at))
+                        END AS age
+                FROM order_storage
+                WHERE order_id = :order_id;
+                """,
+            ),
+            {"order_id": order_id},
+        )
+        row = result.fetchone()
+        if row is None:
+            return None
+
+        (
+            order_id,
+            order_name,
+            storage_type,
+            best_storage_type,
+            fresh_max_age,
+            age,
+        ) = row
+
+        order = Order(order_id, order_name, best_storage_type, fresh_max_age)
+        storage_order = StorageOrder(storage_type, age, order)
+        return storage_order
 
     @contextmanager
     def transaction(

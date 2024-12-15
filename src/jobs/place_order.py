@@ -18,10 +18,10 @@ def place_order(
     order: Order,
     db_client: DatabaseClient,
     action_log: ActionLog,
-    session_pool: Engine,
+    connection_pool: Engine,
 ):
     try:
-        with session_pool.connect() as connection:
+        with connection_pool.connect() as connection:
             _place_order(order, db_client, action_log, connection)
     except IntegrityError as e:
         logger.error(

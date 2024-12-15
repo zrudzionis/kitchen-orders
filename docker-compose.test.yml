@@ -1,0 +1,44 @@
+version: '3.9'
+
+networks:
+  shared_network:
+    driver: bridge
+
+services:
+  test:
+    container_name: test
+    build:
+      context: .
+      dockerfile: test-Dockerfile
+    environment:
+      DB_NAME: postgres
+      DB_USER: postgres
+      DB_PASSWORD: example
+      DB_HOST: db
+      DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - shared_network
+    volumes:
+      - "./test_data:/home/test_data"
+
+  db:
+    image: postgres
+    container_name: db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: example
+    ports:
+      - "5432:5432"
+    networks:
+      - shared_network
+    volumes:
+      - ./migrations:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 1s
+      timeout: 5s
+      retries: 10

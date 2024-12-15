@@ -130,6 +130,14 @@ Some containers start on fixed ports:
 - Web server: 8000
 - Adminer: 8080
 
+## Quality Control
+
+Run tests:
+
+```
+docker-compose -f docker-compose.test.yml build && docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from test
+```
+
 ## Thoughts on possible solutions
 
 There are many ways to approach this problem.
