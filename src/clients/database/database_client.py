@@ -21,7 +21,7 @@ class DatabaseClient:
         return Inventory(
             hot=inventory_map[StorageType.HOT],
             cold=inventory_map[StorageType.COLD],
-            shelf=inventory_map[StorageType.SHELF],
+            room=inventory_map[StorageType.ROOM],
         )
 
     def fetch_order_to_move(
@@ -66,7 +66,7 @@ class DatabaseClient:
                                 2 * EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at))
                         END AS relative_age
                 FROM order_storage
-                WHERE storage_type = 'shelf' AND best_storage_type IN {storage_types_str}
+                WHERE storage_type = 'room' AND best_storage_type IN {storage_types_str}
                 ORDER BY relative_age DESC
                 LIMIT 1;
                 """
@@ -108,7 +108,7 @@ class DatabaseClient:
                                 2 * EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - updated_at))
                         END AS relative_age
                 FROM order_storage
-                WHERE storage_type = 'shelf'
+                WHERE storage_type = 'room'
                 ORDER BY relative_age DESC
                 LIMIT 1;
                 """

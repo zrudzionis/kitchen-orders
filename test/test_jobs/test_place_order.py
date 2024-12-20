@@ -40,15 +40,15 @@ class TestPlaceOrder(unittest.TestCase):
             )
         self.connection.commit()
 
-    def fill_shelf_storage(
+    def fill_room_storage(
             self,
             start_id=1,
-            best_storage_type=StorageType.SHELF):
-        for i in range(start_id, start_id + MaxInventory.SHELF):
+            best_storage_type=StorageType.ROOM):
+        for i in range(start_id, start_id + MaxInventory.ROOM):
             self.db_client.insert_order(
                 self.connection,
                 Order(str(i), str(i), best_storage_type, 10 + i),
-                StorageType.SHELF,
+                StorageType.ROOM,
             )
         self.connection.commit()
 
@@ -62,7 +62,7 @@ class TestPlaceOrder(unittest.TestCase):
         )
         self.assert_actions_equal(action_log, [Action.PLACE])
 
-    def test_when_hot_storage_is_full_then_order_is_placed_in_shelf_storage(
+    def test_when_hot_storage_is_full_then_order_is_placed_in_room_storage(
             self):
         self.fill_hot_storage()
 
@@ -78,12 +78,12 @@ class TestPlaceOrder(unittest.TestCase):
 
         self.assert_actions_equal(action_log, [Action.PLACE])
         self.assertIsNotNone(order)
-        self.assertEqual(order.storage_type, StorageType.SHELF)
+        self.assertEqual(order.storage_type, StorageType.ROOM)
 
-    def test_when_hot_and_shelf_storage_is_full_then_order_is_discarded_and_placed_in_shelf_storage(
+    def test_when_hot_and_room_storage_is_full_then_order_is_discarded_and_placed_in_room_storage(
             self):
         self.fill_hot_storage(start_id=1)
-        self.fill_shelf_storage(start_id=1 + MaxInventory.HOT)
+        self.fill_room_storage(start_id=1 + MaxInventory.HOT)
 
         action_log = ActionLog()
         place_order(
@@ -97,7 +97,7 @@ class TestPlaceOrder(unittest.TestCase):
 
         self.assert_actions_equal(action_log, [Action.DISCARD, Action.PLACE])
         self.assertIsNotNone(order)
-        self.assertEqual(order.storage_type, StorageType.SHELF)
+        self.assertEqual(order.storage_type, StorageType.ROOM)
 
     def tearDown(self):
         self.db_client.delete_all_orders(self.connection)

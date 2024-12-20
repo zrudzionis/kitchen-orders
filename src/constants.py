@@ -21,13 +21,13 @@ EVENTS_FILE_PATH = os.path.join(SHARED_VOLUME, "events.json")
 class StorageType:
     HOT = "hot"
     COLD = "cold"
-    SHELF = "shelf"
+    ROOM = "room"
 
 
 class MaxInventory:
     HOT = 6
     COLD = 6
-    SHELF = 12
+    ROOM = 12
 
 
 class TransactionIsolationLevel(Enum):

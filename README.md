@@ -189,7 +189,7 @@ CREATE TABLE inventory (
     CONSTRAINT inventory_check CHECK (
         (storage_type = 'cold' AND inventory_count >= 0 AND inventory_count <= 6) OR
         (storage_type = 'hot' AND inventory_count >= 0 AND inventory_count <= 6) OR
-        (storage_type = 'shelf' AND inventory_count >= 0 AND inventory_count <= 12)
+        (storage_type = 'room' AND inventory_count >= 0 AND inventory_count <= 12)
     )
 );
 ```

@@ -10,19 +10,19 @@
     {
       "id": "debcbd60",
       "name": "Caesar Salad",
-      "temp": "shelf",
+      "temp": "room",
       "freshness": 14
     },
     {
       "id": "debbefcb",
       "name": "Grilled Cheese Sandwich",
-      "temp": "shelf",
+      "temp": "room",
       "freshness": 180
     },
     {
       "id": "e8bd6d0d",
       "name": "BBQ Ribs",
-      "temp": "shelf",
+      "temp": "room",
       "freshness": 273
     },
     {
@@ -34,7 +34,7 @@
     {
       "id": "bd7aadea",
       "name": "French Fries",
-      "temp": "shelf",
+      "temp": "room",
       "freshness": 22
     },
     {
@@ -52,7 +52,7 @@
     {
       "id": "0ad6c37d",
       "name": "Margherita Pizza",
-      "temp": "shelf",
+      "temp": "room",
       "freshness": 47
     },
     {
@@ -70,7 +70,7 @@
     {
       "id": "c7d0d111",
       "name": "Cheeseburger",
-      "temp": "shelf",
+      "temp": "room",
       "freshness": 172
     },
     {
@@ -82,13 +82,13 @@
     {
       "id": "7ec3ca02",
       "name": "Grilled Salmon",
-      "temp": "shelf",
+      "temp": "room",
       "freshness": 209
     },
     {
       "id": "aa002fcb",
       "name": "Vegetable Stir Fry",
-      "temp": "shelf",
+      "temp": "room",
       "freshness": 244
     },
     {

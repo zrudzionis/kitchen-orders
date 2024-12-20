@@ -4,13 +4,13 @@ CREATE TABLE inventory (
     CONSTRAINT inventory_check CHECK (
         (storage_type = 'hot' AND inventory_count >= 0 AND inventory_count <= 6) OR
         (storage_type = 'cold' AND inventory_count >= 0 AND inventory_count <= 6) OR
-        (storage_type = 'shelf' AND inventory_count >= 0 AND inventory_count <= 12)
+        (storage_type = 'room' AND inventory_count >= 0 AND inventory_count <= 12)
     )
 );
 
 INSERT INTO inventory (storage_type, inventory_count) VALUES ('hot', 0);
 INSERT INTO inventory (storage_type, inventory_count) VALUES ('cold', 0);
-INSERT INTO inventory (storage_type, inventory_count) VALUES ('shelf', 0);
+INSERT INTO inventory (storage_type, inventory_count) VALUES ('room', 0);
 
 
 CREATE TABLE order_storage (
@@ -22,8 +22,8 @@ CREATE TABLE order_storage (
     cumulative_age BIGINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT storage_type_check CHECK (storage_type IN ('hot', 'cold', 'shelf')),
-    CONSTRAINT best_storage_type_check CHECK (best_storage_type IN ('hot', 'cold', 'shelf'))
+    CONSTRAINT storage_type_check CHECK (storage_type IN ('hot', 'cold', 'room')),
+    CONSTRAINT best_storage_type_check CHECK (best_storage_type IN ('hot', 'cold', 'room'))
 );
 
 CREATE OR REPLACE FUNCTION update_order_age()
